@@ -44,8 +44,8 @@ exists. Target: the QNX 8.0 AArch64 QEMU VM.
 | 1.1  | `./waf configure --board SITL_aarch64_qnx`                    | Done        | Defined like `SITL_arm_linux_gnueabihf`, but linked dynamically. Configure needs no options or environment variables, and every configure check gives the correct result for QNX |
 | 1.2  | QNX build flags (`_QNX_SOURCE`, `libsocket`, CAN)             | Done        | `_QNX_SOURCE` for every QNX build, as g++ defines `_GNU_SOURCE` on Linux. A `libsocket` configure check modelled on the `librt` one. SocketCAN decided by the target OS, so SITL on QNX uses multicast CAN, as on macOS |
 | 1.3  | POSIX filesystem `dirent` adapter                             | Done        | Every QNX target uses ArduPilot's fixed-size `struct dirent`. The POSIX backend copies each entry from QNX's and takes its type from `fstatat()`, as the FATFS backend does. Disk space uses `statvfs()`. Compiles; directory listing is first exercised when SITL runs (1.7) |
-| 1.4  | `AP_HAL_SITL` compiles                                        | Not started | **Current blocker.** 4 files fail: `UART_utils.cpp` uses the Linux `asm/ioctls.h`, `UARTDriver.cpp` uses `CRTSCTS` (QNX has `IHFLOW` and `OHFLOW`), and `RCInput.cpp` and `Scheduler.cpp` hit the `htole16` fallback in `AP_HAL/utility/sparse-endian.h`, which clashes with QNX's `net/netbyte.h` |
-| 1.5  | `SITL` physics library and other libraries compile            | Partial     | The physics library compiles unchanged. lwIP (used by AP_Networking) redefines `struct iovec`, which QNX already defines |
+| 1.4  | `AP_HAL_SITL` compiles                                        | Done        | Serial speed through standard `termios`, `CRTSCTS` defined as `IHFLOW \| OHFLOW`, and `O_SYNC` without `O_DIRECT`, as on OpenBSD. `sparse-endian.h` uses QNX's byte order functions |
+| 1.5  | `SITL` physics library and other libraries compile            | Partial     | **Current blocker.** The physics library compiles unchanged. lwIP (used by AP_Networking) redefines `struct iovec`, which QNX already defines |
 | 1.6  | `arducopter` links                                            | Not started |       |
 | 1.7  | Runs on the QNX VM                                            | Not started |       |
 | 1.8  | MAVLink over TCP from the host                                | Not started | Connect MAVProxy or QGroundControl to `<target-ip>:5760` |
@@ -109,6 +109,10 @@ QNX column is the planned approach.
 | SITL linking             | Static                           | Dynamic                                     | The QNX SDP has no static `libsocket` |
 | Directory entries        | System `struct dirent`           | ArduPilot's fixed-size `struct dirent`, filled from QNX's | QNX's `struct dirent` has a variable-length name and no `d_type` |
 | Disk space               | `statfs()`                       | `statvfs()`                                 | QNX has no `statfs()` |
+| Serial port speed (SITL) | `termios2` ioctls                | Standard `termios`, as on macOS and the BSDs | Linux encodes baud rates as codes; QNX uses the numbers themselves |
+| Hardware flow control    | `CRTSCTS`                        | `IHFLOW \| OHFLOW`                          | QNX has separate input and output flags |
+| Unbuffered serial writes (SITL) | `O_DIRECT \| O_SYNC`      | `O_SYNC`, as on OpenBSD                     | QNX has no `O_DIRECT` |
+| Byte order functions     | ArduPilot's own                  | QNX's, from `net/netbyte.h`                 | QNX declares them as functions, which clash with ArduPilot's |
 | Event loop (`Poller`)    | `epoll`, `eventfd`, `timerfd`    | `poll()` or QNX pulses                      | Not available on QNX |
 | SPI and I2C              | `spidev`, `i2c-dev`              | QNX SPI and I2C drivers                     | Different driver interfaces |
 | GPIO and PWM             | sysfs, `/dev/mem`                | QNX GPIO driver, `mmap_device_memory()`     | No sysfs on QNX |
