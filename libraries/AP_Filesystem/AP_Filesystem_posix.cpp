@@ -34,6 +34,9 @@
 #elif defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
+#elif defined(__QNX__)
+// QNX has no statfs(), only the POSIX statvfs()
+#include <sys/statvfs.h>
 #elif CONFIG_HAL_BOARD != HAL_BOARD_QURT
 #include <sys/vfs.h>
 #endif
@@ -171,9 +174,6 @@ int AP_Filesystem_Posix::mkdir(const char *pathname)
     return ret;
 }
 
-void *AP_Filesystem_Posix::opendir(const char *pathname)
-{
-    FS_CHECK_ALLOWED(nullptr);
 #if defined(__QNX__)
 /*
   QNX's struct dirent cannot be used by ArduPilot (see AP_Filesystem.h),
@@ -186,10 +186,10 @@ struct QNX_DIR_Wrapper {
 };
 #endif
 
+void *AP_Filesystem_Posix::opendir(const char *pathname)
+{
+    FS_CHECK_ALLOWED(nullptr);
     pathname = map_filename(pathname);
-    auto *ret = (void*)::opendir(pathname);
-    map_filename_free(pathname);
-    return ret;
 #if defined(__QNX__)
     DIR *d = ::opendir(pathname);
     map_filename_free(pathname);
@@ -205,15 +205,15 @@ struct QNX_DIR_Wrapper {
     ret->d = d;
     return ret;
 #else
+    auto *ret = (void*)::opendir(pathname);
+    map_filename_free(pathname);
+    return ret;
+#endif
 }
 
 struct dirent *AP_Filesystem_Posix::readdir(void *dirp)
-#endif
 {
     FS_CHECK_ALLOWED(nullptr);
-    return ::readdir((DIR *)dirp);
-}
-
 #if defined(__QNX__)
     struct QNX_DIR_Wrapper *w = (struct QNX_DIR_Wrapper *)dirp;
     if (w == nullptr) {
@@ -241,13 +241,13 @@ struct dirent *AP_Filesystem_Posix::readdir(void *dirp)
     }
     return &w->de;
 #else
-int AP_Filesystem_Posix::closedir(void *dirp)
+    return ::readdir((DIR *)dirp);
 #endif
-{
-    FS_CHECK_ALLOWED(-1);
-    return ::closedir((DIR *)dirp);
 }
 
+int AP_Filesystem_Posix::closedir(void *dirp)
+{
+    FS_CHECK_ALLOWED(-1);
 #if defined(__QNX__)
     struct QNX_DIR_Wrapper *w = (struct QNX_DIR_Wrapper *)dirp;
     if (w == nullptr) {
@@ -258,8 +258,11 @@ int AP_Filesystem_Posix::closedir(void *dirp)
     delete w;
     return ret;
 #else
-int AP_Filesystem_Posix::rename(const char *oldpath, const char *newpath)
+    return ::closedir((DIR *)dirp);
 #endif
+}
+
+int AP_Filesystem_Posix::rename(const char *oldpath, const char *newpath)
 {
     FS_CHECK_ALLOWED(-1);
     oldpath = map_filename(oldpath);
@@ -276,6 +279,16 @@ int64_t AP_Filesystem_Posix::disk_free(const char *path)
 #if AP_FILESYSTEM_POSIX_HAVE_STATFS
     FS_CHECK_ALLOWED(-1);
     path = map_filename(path);
+#if defined(__QNX__)
+    struct statvfs stats;
+    const int res = ::statvfs(path, &stats);
+    map_filename_free(path);
+    if (res < 0) {
+        return -1;
+    }
+    // statvfs() counts blocks in units of f_frsize
+    return (((int64_t)stats.f_bavail) * stats.f_frsize);
+#else
     struct statfs stats;
     if (::statfs(path, &stats) < 0) {
         map_filename_free(path);
@@ -283,6 +296,7 @@ int64_t AP_Filesystem_Posix::disk_free(const char *path)
     }
     map_filename_free(path);
     return (((int64_t)stats.f_bavail) * stats.f_bsize);
+#endif
 #else
     return -1;
 #endif
@@ -294,6 +308,16 @@ int64_t AP_Filesystem_Posix::disk_space(const char *path)
 #if AP_FILESYSTEM_POSIX_HAVE_STATFS
     FS_CHECK_ALLOWED(-1);
     path = map_filename(path);
+#if defined(__QNX__)
+    struct statvfs stats;
+    const int res = ::statvfs(path, &stats);
+    map_filename_free(path);
+    if (res < 0) {
+        return -1;
+    }
+    // statvfs() counts blocks in units of f_frsize
+    return (((int64_t)stats.f_blocks) * stats.f_frsize);
+#else
     struct statfs stats;
     if (::statfs(path, &stats) < 0) {
         map_filename_free(path);
@@ -301,6 +325,7 @@ int64_t AP_Filesystem_Posix::disk_space(const char *path)
     }
     map_filename_free(path);
     return (((int64_t)stats.f_blocks) * stats.f_bsize);
+#endif
 #else
     return -1;
 #endif
