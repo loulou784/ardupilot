@@ -1,8 +1,8 @@
 #pragma once
 
-#include "AP_HAL_Empty.h"
+#include "AP_HAL_QNX.h"
 
-class Empty::RCOutput : public AP_HAL::RCOutput {
+class QNX::RCOutput : public AP_HAL::RCOutput {
     void     init() override;
     void     set_freq(uint32_t chmask, uint16_t freq_hz) override;
     uint16_t get_freq(uint8_t ch) override;

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "AP_HAL_Empty.h"
+#include "AP_HAL_QNX.h"
 
-class Empty::Scheduler : public AP_HAL::Scheduler {
+class QNX::Scheduler : public AP_HAL::Scheduler {
 public:
     Scheduler() {}
     void     init() override {}

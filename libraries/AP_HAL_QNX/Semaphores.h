@@ -1,8 +1,8 @@
 #pragma once
 
-#include "AP_HAL_Empty.h"
+#include "AP_HAL_QNX.h"
 
-class Empty::Semaphore : public AP_HAL::Semaphore {
+class QNX::Semaphore : public AP_HAL::Semaphore {
 public:
 
     bool give() override;

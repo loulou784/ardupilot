@@ -1,6 +1,6 @@
 #include "AnalogIn.h"
 
-using namespace Empty;
+using namespace QNX;
 
 AnalogSource::AnalogSource(float v) :
     _v(v)

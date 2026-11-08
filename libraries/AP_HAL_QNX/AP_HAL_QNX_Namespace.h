@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Empty {
+namespace QNX {
     class AnalogIn;
     class AnalogSource;
     class DigitalSource;

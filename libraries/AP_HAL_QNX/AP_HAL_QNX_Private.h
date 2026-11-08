@@ -1,7 +1,7 @@
 #pragma once
 
-/* Umbrella header for all private headers of the AP_HAL_Empty module.
- * Only import this header from inside AP_HAL_Empty
+/* Umbrella header for all private headers of the AP_HAL_QNX module.
+ * Only import this header from inside AP_HAL_QNX
  */
 
 #include "AnalogIn.h"

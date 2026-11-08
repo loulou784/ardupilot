@@ -1,13 +1,13 @@
 
 #include <AP_HAL/AP_HAL.h>
-#if CONFIG_HAL_BOARD == HAL_BOARD_EMPTY
+#if CONFIG_HAL_BOARD == HAL_BOARD_QNX
 
 #include <assert.h>
 
-#include "HAL_Empty_Class.h"
-#include "AP_HAL_Empty_Private.h"
+#include "HAL_QNX_Class.h"
+#include "AP_HAL_QNX_Private.h"
 
-using namespace Empty;
+using namespace QNX;
 
 static UARTDriver serial0Driver;
 static UARTDriver serial1Driver;
@@ -24,7 +24,7 @@ static Util utilInstance;
 static OpticalFlow opticalFlowDriver;
 static Flash flashDriver;
 
-HAL_Empty::HAL_Empty() :
+HAL_QNX::HAL_QNX() :
     AP_HAL::HAL(
         &serial0Driver,
         &serial1Driver,
@@ -50,7 +50,7 @@ HAL_Empty::HAL_Empty() :
         nullptr)            /* no DSP */
 {}
 
-void HAL_Empty::run(int argc, char* const argv[], Callbacks* callbacks) const
+void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
 {
     /* initialize all drivers and private members here.
      * up to the programmer to do this in the correct order.
@@ -67,14 +67,14 @@ void HAL_Empty::run(int argc, char* const argv[], Callbacks* callbacks) const
     }
 }
 
-static HAL_Empty hal_empty;
+static HAL_QNX hal_qnx;
 
 const AP_HAL::HAL& AP_HAL::get_HAL() {
-    return hal_empty;
+    return hal_qnx;
 }
 
 AP_HAL::HAL& AP_HAL::get_HAL_mutable() {
-    return hal_empty;
+    return hal_qnx;
 }
 
 #endif

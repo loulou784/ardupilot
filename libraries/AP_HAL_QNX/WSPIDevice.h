@@ -24,7 +24,7 @@
 #define HAL_USE_WSPI_DEFAULT_CFG 1
 #endif
 
-namespace Empty
+namespace QNX
 {
 
 class WSPIDevice : public AP_HAL::WSPIDevice

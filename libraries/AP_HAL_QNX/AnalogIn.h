@@ -1,8 +1,8 @@
 #pragma once
 
-#include "AP_HAL_Empty.h"
+#include "AP_HAL_QNX.h"
 
-class Empty::AnalogSource : public AP_HAL::AnalogSource {
+class QNX::AnalogSource : public AP_HAL::AnalogSource {
 public:
     AnalogSource(float v);
     float read_average() override;
@@ -15,7 +15,7 @@ private:
     float _v;
 };
 
-class Empty::AnalogIn : public AP_HAL::AnalogIn {
+class QNX::AnalogIn : public AP_HAL::AnalogIn {
 public:
     AnalogIn();
     void init() override;

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "AP_HAL_Empty.h"
+#include "AP_HAL_QNX.h"
 
-class Empty::Flash : public AP_HAL::Flash {
+class QNX::Flash : public AP_HAL::Flash {
 public:
     uint32_t getpageaddr(uint32_t page) override { return 0; }
     uint32_t getpagesize(uint32_t page) override { return 0; }

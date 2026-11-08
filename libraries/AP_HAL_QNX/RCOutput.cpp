@@ -2,7 +2,7 @@
 #include "RCOutput.h"
 #include <AP_Math/AP_Math.h>
 
-using namespace Empty;
+using namespace QNX;
 
 void RCOutput::init() {}
 

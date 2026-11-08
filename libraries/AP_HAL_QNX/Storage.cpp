@@ -2,7 +2,7 @@
 #include <string.h>
 #include "Storage.h"
 
-using namespace Empty;
+using namespace QNX;
 
 Storage::Storage()
 {}

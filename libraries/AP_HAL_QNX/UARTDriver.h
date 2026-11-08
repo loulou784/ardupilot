@@ -1,15 +1,15 @@
 #pragma once
 
-#include "AP_HAL_Empty.h"
+#include "AP_HAL_QNX.h"
 
-class Empty::UARTDriver : public AP_HAL::UARTDriver {
+class QNX::UARTDriver : public AP_HAL::UARTDriver {
 public:
     UARTDriver();
-    /* Empty implementations of UARTDriver virtual methods */
+    /* QNX implementations of UARTDriver virtual methods */
     bool is_initialized() override;
     bool tx_pending() override;
 
-    /* Empty implementations of Stream virtual methods */
+    /* QNX implementations of Stream virtual methods */
     uint32_t txspace() override;
 
 

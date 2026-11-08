@@ -16,9 +16,9 @@
  */
 #pragma once
 
-#include "AP_HAL_Empty.h"
+#include "AP_HAL_QNX.h"
 
-class Empty::DSP : public AP_HAL::DSP {
+class QNX::DSP : public AP_HAL::DSP {
 #if HAL_WITH_DSP
 public:
     virtual FFTWindowState* fft_init(uint16_t window_size, uint16_t sample_rate, uint8_t sliding_window_size) override { return nullptr; }

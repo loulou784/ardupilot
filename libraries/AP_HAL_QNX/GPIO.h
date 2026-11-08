@@ -1,8 +1,8 @@
 #pragma once
 
-#include "AP_HAL_Empty.h"
+#include "AP_HAL_QNX.h"
 
-class Empty::GPIO : public AP_HAL::GPIO {
+class QNX::GPIO : public AP_HAL::GPIO {
 public:
     GPIO();
     void    init() override;
@@ -18,7 +18,7 @@ public:
     bool    usb_connected(void) override;
 };
 
-class Empty::DigitalSource : public AP_HAL::DigitalSource {
+class QNX::DigitalSource : public AP_HAL::DigitalSource {
 public:
     DigitalSource(uint8_t v);
     void    mode(uint8_t output) override;

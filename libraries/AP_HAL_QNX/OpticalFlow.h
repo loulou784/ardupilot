@@ -14,7 +14,7 @@
  */
 #pragma once
 
-class Empty::OpticalFlow : public AP_HAL::OpticalFlow {
+class QNX::OpticalFlow : public AP_HAL::OpticalFlow {
 public:
     void init() override { }
     bool read(Data_Frame& frame) override { return false; }

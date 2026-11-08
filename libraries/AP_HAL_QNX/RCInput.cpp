@@ -1,7 +1,7 @@
 
 #include "RCInput.h"
 
-using namespace Empty;
+using namespace QNX;
 RCInput::RCInput()
 {}
 
