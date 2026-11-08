@@ -1,0 +1,56 @@
+#pragma once
+
+#define HAL_BOARD_NAME "QNX"
+#define HAL_CPU_CLASS HAL_CPU_CLASS_1000
+#define HAL_MEM_CLASS HAL_MEM_CLASS_1000
+#define HAL_STORAGE_SIZE            16384
+#define HAL_STORAGE_SIZE_AVAILABLE  HAL_STORAGE_SIZE
+
+#ifndef CONFIG_HAL_BOARD_SUBTYPE
+#define CONFIG_HAL_BOARD_SUBTYPE HAL_BOARD_SUBTYPE_NONE
+#endif
+
+#ifndef HAL_PROGRAM_SIZE_LIMIT_KB
+#define HAL_PROGRAM_SIZE_LIMIT_KB 4096
+#endif
+
+#define HAL_HAVE_BOARD_VOLTAGE 0
+#define HAL_HAVE_SERVO_VOLTAGE 0
+#define HAL_HAVE_SAFETY_SWITCH 0
+
+#ifndef HAL_HAVE_HARDWARE_DOUBLE
+#define HAL_HAVE_HARDWARE_DOUBLE 1
+#endif
+
+#ifndef HAL_WITH_EKF_DOUBLE
+#define HAL_WITH_EKF_DOUBLE HAL_HAVE_HARDWARE_DOUBLE
+#endif
+
+#ifndef HAL_BOARD_STATE_DIRECTORY
+#define HAL_BOARD_STATE_DIRECTORY "/var/lib/ardupilot"
+#endif
+
+#ifndef HAL_BOARD_LOG_DIRECTORY
+#define HAL_BOARD_LOG_DIRECTORY HAL_BOARD_STATE_DIRECTORY "/logs"
+#endif
+
+#ifndef HAL_BOARD_TERRAIN_DIRECTORY
+#define HAL_BOARD_TERRAIN_DIRECTORY HAL_BOARD_STATE_DIRECTORY "/terrain"
+#endif
+
+#ifndef HAL_BOARD_STORAGE_DIRECTORY
+#define HAL_BOARD_STORAGE_DIRECTORY HAL_BOARD_STATE_DIRECTORY
+#endif
+
+// no writable filesystem backend yet on QNX, so scripting (which needs
+// one) is off until a filesystem backend is ported
+#ifndef AP_SCRIPTING_ENABLED
+#define AP_SCRIPTING_ENABLED 0
+#endif
+
+// only include if compiling C++ code
+#ifdef __cplusplus
+#include <AP_HAL_QNX/Semaphores.h>
+#define HAL_Semaphore QNX::Semaphore
+#define HAL_BinarySemaphore QNX::BinarySemaphore
+#endif
