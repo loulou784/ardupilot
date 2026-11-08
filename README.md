@@ -42,10 +42,10 @@ exists. Target: the QNX 8.0 AArch64 QEMU VM.
 | #    | Step                                                          | Status      | Notes |
 |------|---------------------------------------------------------------|-------------|-------|
 | 1.1  | `./waf configure --board SITL_aarch64_qnx`                    | Done        | Defined like `SITL_arm_linux_gnueabihf`, but linked dynamically. Configure needs no options or environment variables, and every configure check gives the correct result for QNX |
-| 1.2  | QNX flags in the SITL board (`_QNX_SOURCE`, `socket`, CAN off) | Not started | Shared with the QNX boards (2.1) |
-| 1.3  | POSIX filesystem `dirent` adapter                             | Not started | **Current blocker:** the build stops at 429/1430 because QNX's `struct dirent` has no `d_type` |
-| 1.4  | `AP_HAL_SITL` compiles                                        | Not started | Expect small `__QNX__` guards next to the existing `__APPLE__` ones |
-| 1.5  | `SITL` physics library compiles                               | Not started |       |
+| 1.2  | QNX build flags (`_QNX_SOURCE`, `libsocket`, CAN)             | Done        | `_QNX_SOURCE` for every QNX build, as g++ defines `_GNU_SOURCE` on Linux. A `libsocket` configure check modelled on the `librt` one. SocketCAN decided by the target OS, so SITL on QNX uses multicast CAN, as on macOS |
+| 1.3  | POSIX filesystem `dirent` adapter                             | Not started | **Current blocker.** QNX's `struct dirent` has no `d_type` (`AP_Filesystem.cpp`, `AP_Filesystem_Sys.cpp`, `AP_Filesystem_ROMFS.cpp`, `GCS_FTP.cpp`), and `AP_Filesystem_posix.cpp` uses the Linux `statfs` from `sys/vfs.h` |
+| 1.4  | `AP_HAL_SITL` compiles                                        | Not started | 4 files fail: `UART_utils.cpp` uses the Linux `asm/ioctls.h`, `UARTDriver.cpp` uses `CRTSCTS` (QNX has `IHFLOW` and `OHFLOW`), and `RCInput.cpp` and `Scheduler.cpp` hit the `htole16` fallback in `AP_HAL/utility/sparse-endian.h`, which clashes with QNX's `net/netbyte.h` |
+| 1.5  | `SITL` physics library and other libraries compile            | Partial     | The physics library compiles unchanged. lwIP (used by AP_Networking) redefines `struct iovec`, which QNX already defines |
 | 1.6  | `arducopter` links                                            | Not started |       |
 | 1.7  | Runs on the QNX VM                                            | Not started |       |
 | 1.8  | MAVLink over TCP from the host                                | Not started | Connect MAVProxy or QGroundControl to `<target-ip>:5760` |
@@ -104,14 +104,14 @@ QNX column is the planned approach.
 
 | Area                     | Linux port                       | QNX port                                    | Reason |
 |--------------------------|----------------------------------|---------------------------------------------|--------|
-| C library                | glibc                            | Defines `_QNX_SOURCE`, links `socket`       | QNX keeps sockets in a separate library and hides many POSIX declarations behind `_QNX_SOURCE` |
+| C library                | glibc                            | Defines `_QNX_SOURCE`, links `libsocket`    | g++ defines `_GNU_SOURCE` on Linux but not `_QNX_SOURCE` on QNX, without which QNX hides many POSIX declarations. QNX keeps sockets in a separate library |
 | Malloc wrapper           | Added before the configure checks | Added after the configure checks            | QNX has no symbol versioning, so `--wrap,malloc` also catches the `malloc` that `libc++.so` uses and the check programs fail to link |
 | SITL linking             | Static                           | Dynamic                                     | The QNX SDP has no static `libsocket` |
 | Directory entries        | System `struct dirent`           | ArduPilot's fixed-size `struct dirent`      | QNX's `struct dirent` has a variable-length name and no `d_type` |
 | Event loop (`Poller`)    | `epoll`, `eventfd`, `timerfd`    | `poll()` or QNX pulses                      | Not available on QNX |
 | SPI and I2C              | `spidev`, `i2c-dev`              | QNX SPI and I2C drivers                     | Different driver interfaces |
 | GPIO and PWM             | sysfs, `/dev/mem`                | QNX GPIO driver, `mmap_device_memory()`     | No sysfs on QNX |
-| CAN                      | SocketCAN                        | Off for now                                 | No SocketCAN on QNX |
+| CAN                      | SocketCAN                        | SITL: multicast CAN, as on macOS. HAL: off for now | No SocketCAN on QNX |
 
 ## Building
 
