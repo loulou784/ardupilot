@@ -979,6 +979,7 @@ class SITLBoard(Board):
         ]
 
         cfg.check_librt(env)
+        cfg.check_libsocket(env)
         cfg.check_feenableexcept()
 
         env.LINKFLAGS += ['-pthread',]
@@ -1779,12 +1780,11 @@ class qnx(Board):
         if not cfg.env.DEBUG:
             env.CXXFLAGS += ['-O3']
 
-        # unlike glibc, the QNX C library keeps sockets and the math
-        # functions in separate libraries
         env.LIB += [
-            'socket',
             'm',
         ]
+
+        cfg.check_libsocket(env)
 
         env.AP_LIBRARIES += [
             'AP_HAL_QNX',

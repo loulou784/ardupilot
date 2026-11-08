@@ -176,6 +176,39 @@ def check_librt(cfg, env):
     return ret
 
 @conf
+def check_libsocket(cfg, env):
+    '''some C libraries, such as QNX's, keep the socket functions in a
+    separate libsocket'''
+    if cfg.env.DEST_OS == 'darwin':
+        return True
+
+    if cfg.env.TOOLCHAIN == 'emscripten':
+        return True
+
+    ret = cfg.check(
+        compiler='cxx',
+        fragment='''
+        #include <sys/socket.h>
+
+        int main() {
+            return socket(AF_INET, SOCK_DGRAM, 0);
+        }''',
+        msg='Checking for need to link with libsocket',
+        okmsg='not necessary',
+        errmsg='necessary',
+        mandatory=False,
+    )
+
+    if ret:
+        return ret
+
+    ret = cfg.check(compiler='cxx', lib='socket')
+    if ret:
+        env.LIB += cfg.env['LIB_SOCKET']
+
+    return ret
+
+@conf
 def check_feenableexcept(cfg):
 
     cfg.check(
