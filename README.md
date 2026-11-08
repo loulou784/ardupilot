@@ -39,6 +39,8 @@ simulator. Running it on QNX tests the toolchain, the C library and the
 operating system with a vehicle that flies, before any hardware driver
 exists. Target: the QNX 8.0 AArch64 QEMU VM.
 
+**Complete:** SITL on QNX builds, runs and flies an AUTO mission.
+
 | #    | Step                                                          | Status      | Notes |
 |------|---------------------------------------------------------------|-------------|-------|
 | 1.1  | `./waf configure --board SITL_aarch64_qnx`                    | Done        | Defined like `SITL_arm_linux_gnueabihf`, but linked dynamically. Configure needs no options or environment variables, and every configure check gives the correct result for QNX |
@@ -49,7 +51,7 @@ exists. Target: the QNX 8.0 AArch64 QEMU VM.
 | 1.6  | `arducopter` links                                            | Done        | QNX AArch64 executable, about 6.4 MB with debug information, linked with `libsocket`. The malloc wrapper is in and waf's symbol check passes. The whole build has no warnings |
 | 1.7  | Runs on the QNX VM                                            | Done        | Starts and runs the Copter main loop on the QNX 8.0 AArch64 QEMU VM: EKF3 aligned, GPS fix, `ArduPilot Ready`. Simulated time runs at about 0.3x real time, as the VM is emulated (no KVM for AArch64 on an x86 host) |
 | 1.8  | MAVLink over TCP from the host                                | Done        | pymavlink on the host, connected to `<target-ip>:5760`: heartbeat, 30 telemetry message types, parameter reads, and MAVLink FTP listings of real QNX files and `@SYS` |
-| 1.9  | AUTO mission flown                                            | Not started | **Next step.** Completion criterion for this table |
+| 1.9  | AUTO mission flown                                            | Done        | Flown as ArduPilot's autotest does (`AUTO_OPTIONS` 3, arm in AUTO): takeoff to 20 m, a 50 m square, RTL. Every waypoint reached in order, landed and disarmed 0.0 m from home, no failsafe or EKF messages. A 6.5 MB flight log was written to `logs/` on QNX |
 
 ## 2. QNX HAL peripherals (`AP_HAL_QNX`)
 
@@ -177,6 +179,9 @@ ntoaarch64-gdb --batch \
 SITL waits for a ground station on TCP port 5760 before it starts
 flying, for example `mavproxy.py --master tcp:<target-ip>:5760`. Add
 `--wipe` to the arguments to start from clean parameters.
+
+To stop SITL, interrupt the debugger (Ctrl+C) and let it exit. SITL
+exits by itself when its parent, the QNX debug agent, goes away.
 
 ## License
 
