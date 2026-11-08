@@ -1,0 +1,3 @@
+include ../sitl/hwdef.dat
+
+env TOOLCHAIN ntoaarch64
