@@ -18,4 +18,6 @@ public:
 
     void     reboot(bool hold_in_bootloader) override { for (;;); }
 
+    bool     in_main_thread() const override { return true; }
+
 };

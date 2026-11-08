@@ -13,7 +13,9 @@ static UARTDriver serial0Driver;
 static UARTDriver serial1Driver;
 static UARTDriver serial2Driver;
 static UARTDriver serial3Driver;
+static I2CDeviceManager i2cDeviceManager;
 static SPIDeviceManager spiDeviceManager;
+static WSPIDeviceManager wspiDeviceManager;
 static AnalogIn analogIn;
 static Storage storageDriver;
 static GPIO gpioDriver;
@@ -23,6 +25,9 @@ static Scheduler schedulerInstance;
 static Util utilInstance;
 static OpticalFlow opticalFlowDriver;
 static Flash flashDriver;
+#if HAL_WITH_DSP
+static DSP dspDriver;
+#endif
 
 HAL_QNX::HAL_QNX() :
     AP_HAL::HAL(
@@ -36,7 +41,9 @@ HAL_QNX::HAL_QNX() :
         nullptr,            /* no SERIAL7 */
         nullptr,            /* no SERIAL8 */
         nullptr,            /* no SERIAL9 */
+        &i2cDeviceManager,
         &spiDeviceManager,
+        &wspiDeviceManager,
         &analogIn,
         &storageDriver,
         &serial0Driver,
@@ -47,7 +54,10 @@ HAL_QNX::HAL_QNX() :
         &utilInstance,
         &opticalFlowDriver,
         &flashDriver,
-        nullptr)            /* no DSP */
+#if HAL_WITH_DSP
+        &dspDriver,
+#endif
+        nullptr)            /* no CAN */
 {}
 
 void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
@@ -57,7 +67,6 @@ void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
      * Scheduler should likely come first. */
     scheduler->init();
     serial(0)->begin(115200);
-    _member->init();
 
     callbacks->setup();
     scheduler->set_system_initialized();
