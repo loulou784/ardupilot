@@ -41,7 +41,7 @@ exists. Target: the QNX 8.0 AArch64 QEMU VM.
 
 | #    | Step                                                          | Status      | Notes |
 |------|---------------------------------------------------------------|-------------|-------|
-| 1.1  | Configure `--board sitl --toolchain ntoaarch64`               | Partial     | Works only when `-D_QNX_SOURCE` and `-lsocket` are passed through environment variables |
+| 1.1  | `./waf configure --board SITL_aarch64_qnx`                    | Done        | Defined like `SITL_arm_linux_gnueabihf`, but linked dynamically. Configure needs no options or environment variables, and every configure check gives the correct result for QNX |
 | 1.2  | QNX flags in the SITL board (`_QNX_SOURCE`, `socket`, CAN off) | Not started | Shared with the QNX boards (2.1) |
 | 1.3  | POSIX filesystem `dirent` adapter                             | Not started | **Current blocker:** the build stops at 429/1430 because QNX's `struct dirent` has no `d_type` |
 | 1.4  | `AP_HAL_SITL` compiles                                        | Not started | Expect small `__QNX__` guards next to the existing `__APPLE__` ones |
