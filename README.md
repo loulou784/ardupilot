@@ -43,13 +43,13 @@ exists. Target: the QNX 8.0 AArch64 QEMU VM.
 |------|---------------------------------------------------------------|-------------|-------|
 | 1.1  | `./waf configure --board SITL_aarch64_qnx`                    | Done        | Defined like `SITL_arm_linux_gnueabihf`, but linked dynamically. Configure needs no options or environment variables, and every configure check gives the correct result for QNX |
 | 1.2  | QNX build flags (`_QNX_SOURCE`, `libsocket`, CAN)             | Done        | `_QNX_SOURCE` for every QNX build, as g++ defines `_GNU_SOURCE` on Linux. A `libsocket` configure check modelled on the `librt` one. SocketCAN decided by the target OS, so SITL on QNX uses multicast CAN, as on macOS |
-| 1.3  | POSIX filesystem `dirent` adapter                             | Done        | Every QNX target uses ArduPilot's fixed-size `struct dirent`. The POSIX backend copies each entry from QNX's and takes its type from `fstatat()`, as the FATFS backend does. Disk space uses `statvfs()`. Compiles; directory listing is first exercised when SITL runs (1.7) |
+| 1.3  | POSIX filesystem `dirent` adapter                             | Done        | Every QNX target uses ArduPilot's fixed-size `struct dirent`. The POSIX backend copies each entry from QNX's and takes its type from `fstatat()`, as the FATFS backend does. Disk space uses `statvfs()`. Directory listing verified at runtime over MAVLink FTP (1.8) |
 | 1.4  | `AP_HAL_SITL` compiles                                        | Done        | Serial speed through standard `termios`, `CRTSCTS` defined as `IHFLOW \| OHFLOW`, and `O_SYNC` without `O_DIRECT`, as on OpenBSD. `sparse-endian.h` uses QNX's byte order functions |
 | 1.5  | `SITL` physics library and other libraries compile            | Done        | The physics library compiles unchanged. lwIP (used by AP_Networking) uses QNX's `struct iovec`, set in `lwipopts.h` next to the existing macOS settings |
 | 1.6  | `arducopter` links                                            | Done        | QNX AArch64 executable, about 6.4 MB with debug information, linked with `libsocket`. The malloc wrapper is in and waf's symbol check passes. The whole build has no warnings |
-| 1.7  | Runs on the QNX VM                                            | Not started | **Next step**       |
-| 1.8  | MAVLink over TCP from the host                                | Not started | Connect MAVProxy or QGroundControl to `<target-ip>:5760` |
-| 1.9  | AUTO mission flown                                            | Not started | Completion criterion for this table |
+| 1.7  | Runs on the QNX VM                                            | Done        | Starts and runs the Copter main loop on the QNX 8.0 AArch64 QEMU VM: EKF3 aligned, GPS fix, `ArduPilot Ready`. Simulated time runs at about 0.3x real time, as the VM is emulated (no KVM for AArch64 on an x86 host) |
+| 1.8  | MAVLink over TCP from the host                                | Done        | pymavlink on the host, connected to `<target-ip>:5760`: heartbeat, 30 telemetry message types, parameter reads, and MAVLink FTP listings of real QNX files and `@SYS` |
+| 1.9  | AUTO mission flown                                            | Not started | **Next step.** Completion criterion for this table |
 
 ## 2. QNX HAL peripherals (`AP_HAL_QNX`)
 
@@ -158,6 +158,25 @@ ntoaarch64-gdb --batch \
   -ex "set nto-cwd /tmp" \
   -ex run
 ```
+
+SITL for QNX also needs Copter's default parameters and a vehicle model.
+Upload the executable last, as the debugger runs the last file uploaded:
+
+```bash
+source <path-to-sdp>/qnxsdp-env.sh
+ntoaarch64-gdb --batch \
+  -ex "target qnx <target-ip>:8000" \
+  -ex "file build/SITL_aarch64_qnx/bin/arducopter" \
+  -ex "upload Tools/autotest/default_params/copter.parm /tmp/copter.parm" \
+  -ex "upload build/SITL_aarch64_qnx/bin/arducopter /tmp/arducopter-sitl" \
+  -ex "set nto-cwd /tmp" \
+  -ex "set args --model quad --speedup 1 --defaults /tmp/copter.parm -I0" \
+  -ex run
+```
+
+SITL waits for a ground station on TCP port 5760 before it starts
+flying, for example `mavproxy.py --master tcp:<target-ip>:5760`. Add
+`--wipe` to the arguments to start from clean parameters.
 
 ## License
 
