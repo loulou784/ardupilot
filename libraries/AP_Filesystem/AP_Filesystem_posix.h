@@ -24,7 +24,15 @@
 #include <fcntl.h>
 #include <stddef.h>
 #include <stdio.h>
+#if defined(__QNX__)
+// on QNX AP_Filesystem.h defines its own struct dirent, so name QNX's
+// struct qnx_dirent; AP_Filesystem_Posix::readdir() converts between them
+#define dirent qnx_dirent
 #include <dirent.h>
+#undef dirent
+#else
+#include <dirent.h>
+#endif
 #include <unistd.h>
 #include <errno.h>
 #include "AP_Filesystem_backend.h"

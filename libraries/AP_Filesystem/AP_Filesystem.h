@@ -32,13 +32,19 @@
 #define MAX_NAME_LEN 255
 #endif
 
-#if (CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS) || (CONFIG_HAL_BOARD == HAL_BOARD_ESP32) || (CONFIG_HAL_BOARD == HAL_BOARD_QNX)
+#if (CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS) || (CONFIG_HAL_BOARD == HAL_BOARD_ESP32) || defined(__QNX__)
 #define DT_REG 0
 #define DT_DIR 1
 #define DT_LNK 10
 #endif
 
-#if (CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS) || (CONFIG_HAL_BOARD == HAL_BOARD_QNX)
+/*
+  ChibiOS has no system struct dirent.  QNX has one, but its d_name is
+  variable-length and it has no d_type, so it can neither be embedded
+  nor filled in by ArduPilot; AP_Filesystem_posix.h includes it under
+  another name.
+ */
+#if (CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS) || defined(__QNX__)
 #if AP_FILESYSTEM_FATFS_ENABLED
 #include "AP_Filesystem_FATFS.h"
 #endif
@@ -51,7 +57,7 @@ struct dirent {
    uint8_t d_type;
 };
 
-#endif // HAL_BOARD_CHIBIOS
+#endif // HAL_BOARD_CHIBIOS || __QNX__
 
 #include <fcntl.h>
 #include <errno.h>

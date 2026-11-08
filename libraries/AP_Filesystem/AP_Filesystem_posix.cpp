@@ -23,6 +23,11 @@
 #include "AP_Filesystem.h"
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
+#if defined(__QNX__)
+// for the QNX directory entry conversion below
+#include <AP_Common/AP_Common.h>
+#include <AP_Math/AP_Math.h>
+#endif
 
 #if defined(__APPLE__) || defined(__OpenBSD__)
 #include <sys/mount.h>
@@ -169,25 +174,92 @@ int AP_Filesystem_Posix::mkdir(const char *pathname)
 void *AP_Filesystem_Posix::opendir(const char *pathname)
 {
     FS_CHECK_ALLOWED(nullptr);
+#if defined(__QNX__)
+/*
+  QNX's struct dirent cannot be used by ArduPilot (see AP_Filesystem.h),
+  so entries are copied into ArduPilot's struct dirent, as the FATFS
+  backend does
+ */
+struct QNX_DIR_Wrapper {
+    DIR *d;
+    struct dirent de;
+};
+#endif
+
     pathname = map_filename(pathname);
     auto *ret = (void*)::opendir(pathname);
     map_filename_free(pathname);
     return ret;
+#if defined(__QNX__)
+    DIR *d = ::opendir(pathname);
+    map_filename_free(pathname);
+    if (d == nullptr) {
+        return nullptr;
+    }
+    struct QNX_DIR_Wrapper *ret = NEW_NOTHROW QNX_DIR_Wrapper;
+    if (ret == nullptr) {
+        ::closedir(d);
+        errno = ENOMEM;
+        return nullptr;
+    }
+    ret->d = d;
+    return ret;
+#else
 }
 
 struct dirent *AP_Filesystem_Posix::readdir(void *dirp)
+#endif
 {
     FS_CHECK_ALLOWED(nullptr);
     return ::readdir((DIR *)dirp);
 }
 
+#if defined(__QNX__)
+    struct QNX_DIR_Wrapper *w = (struct QNX_DIR_Wrapper *)dirp;
+    if (w == nullptr) {
+        errno = EINVAL;
+        return nullptr;
+    }
+    const struct qnx_dirent *e;
+    struct stat st;
+    // QNX gives no d_type, so look it up; skip entries removed meanwhile
+    do {
+        e = ::readdir(w->d);
+        if (e == nullptr) {
+            return nullptr;
+        }
+    } while (fstatat(dirfd(w->d), e->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0);
+    const size_t len = MIN(strlen(e->d_name), sizeof(w->de.d_name)-1);
+    strncpy_noterm(w->de.d_name, e->d_name, len);
+    w->de.d_name[len] = 0;
+    if (S_ISDIR(st.st_mode)) {
+        w->de.d_type = DT_DIR;
+    } else if (S_ISLNK(st.st_mode)) {
+        w->de.d_type = DT_LNK;
+    } else {
+        w->de.d_type = DT_REG;
+    }
+    return &w->de;
+#else
 int AP_Filesystem_Posix::closedir(void *dirp)
+#endif
 {
     FS_CHECK_ALLOWED(-1);
     return ::closedir((DIR *)dirp);
 }
 
+#if defined(__QNX__)
+    struct QNX_DIR_Wrapper *w = (struct QNX_DIR_Wrapper *)dirp;
+    if (w == nullptr) {
+        errno = EINVAL;
+        return -1;
+    }
+    const int ret = ::closedir(w->d);
+    delete w;
+    return ret;
+#else
 int AP_Filesystem_Posix::rename(const char *oldpath, const char *newpath)
+#endif
 {
     FS_CHECK_ALLOWED(-1);
     oldpath = map_filename(oldpath);
