@@ -872,6 +872,14 @@ class SITLBoard(Board):
                 symbol = '_' + symbol
             cfg.env.LINKFLAGS += ['-Wl,-u,' + symbol]
 
+        if cfg.env.DEST_OS == 'qnx':
+            # The QNX C library has no symbol versioning, so libc++.so
+            # references a plain malloc, which --wrap,malloc rewrites into
+            # an undefined __wrap_malloc.  waf's configure checks link none
+            # of our code, so with the wrapper every check that links C++
+            # fails; add it only now that they have run.
+            cfg.env.LINKFLAGS += ['-Wl,--wrap,malloc']
+
     def configure_env(self, cfg, env):
         super().configure_env(cfg, env)
         env.DEFINES.update(
@@ -990,6 +998,8 @@ class SITLBoard(Board):
         # wrap malloc to ensure memory is zeroed
         if cfg.env.DEST_OS == 'cygwin':
             pass # handled at runtime in libraries/AP_Common/c++.cpp
+        elif cfg.env.DEST_OS == 'qnx':
+            pass # added in configure(), after the configure checks
         elif platform.system() != 'Darwin':
             env.LINKFLAGS += ['-Wl,--wrap,malloc']
         # Darwin has no --wrap; malloc is replaced in libraries/AP_Common/c++.cpp
