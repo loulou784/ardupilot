@@ -58,6 +58,13 @@ extern "C"
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 #endif
 
+/* QNX specific */
+#if defined(__QNX__)
+/* lwip/src/include/lwip/sockets.h: QNX defines struct iovec in every
+   compilation unit, through sys/platform.h, so lwIP must not */
+#define iovec iovec
+#endif
+
 #ifdef LWIP_OPTTEST_FILE
 #include "lwipopts_test.h"
 #else /* LWIP_OPTTEST_FILE */
