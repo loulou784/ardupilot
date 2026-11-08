@@ -1,78 +1,118 @@
-# ArduPilot Project
+# ArduPilot on QNX
 
-[![Discord](https://img.shields.io/discord/674039678562861068.svg)](https://ardupilot.org/discord)
+This branch ports ArduPilot to QNX SDP 8.0 on AArch64. The target board
+is IcePilot: a Raspberry Pi 4 with an iCE40UP5K I/O FPGA.
 
-[![Test Copter](https://github.com/ArduPilot/ardupilot/workflows/test%20copter/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_sitl_copter.yml) [![Test Plane](https://github.com/ArduPilot/ardupilot/workflows/test%20plane/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_sitl_plane.yml) [![Test Rover](https://github.com/ArduPilot/ardupilot/workflows/test%20rover/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_sitl_rover.yml) [![Test Sub](https://github.com/ArduPilot/ardupilot/workflows/test%20sub/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_sitl_sub.yml) [![Test Tracker](https://github.com/ArduPilot/ardupilot/workflows/test%20tracker/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_sitl_tracker.yml)
+For general ArduPilot documentation, see the
+[upstream README](https://github.com/ArduPilot/ardupilot/blob/master/README.md)
+and [ardupilot.org](https://ardupilot.org).
 
-[![Test AP_Periph](https://github.com/ArduPilot/ardupilot/workflows/test%20ap_periph/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_sitl_periph.yml) [![Test Chibios](https://github.com/ArduPilot/ardupilot/workflows/test%20chibios/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_chibios.yml) [![Test Linux SBC](https://github.com/ArduPilot/ardupilot/workflows/test%20Linux%20SBC/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_linux_sbc.yml) [![Test Replay](https://github.com/ArduPilot/ardupilot/workflows/test%20replay/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_replay.yml)
+**Last updated:** 2026-11-08. Update the tables in the same commit as the
+change they describe.
 
-[![Test Unit Tests](https://github.com/ArduPilot/ardupilot/workflows/test%20unit%20tests%20and%20sitl%20building/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_unit_tests.yml)[![test size](https://github.com/ArduPilot/ardupilot/actions/workflows/test_size.yml/badge.svg)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_size.yml)
+## Status legend
 
-[![Test Environment Setup](https://github.com/ArduPilot/ardupilot/actions/workflows/test_environment.yml/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_environment.yml)
+| Status      | Meaning                                                    |
+|-------------|------------------------------------------------------------|
+| Done        | Implemented and verified                                   |
+| Partial     | Works, with the limitations listed in Notes                |
+| Stub        | Compiles but does nothing (inherited from `AP_HAL_Empty`)  |
+| Not started | No work yet                                                |
+| Not planned | Not needed on this platform                                |
 
-[![Cygwin Build](https://github.com/ArduPilot/ardupilot/actions/workflows/cygwin_build.yml/badge.svg)](https://github.com/ArduPilot/ardupilot/actions/workflows/cygwin_build.yml) [![Macos Build](https://github.com/ArduPilot/ardupilot/actions/workflows/macos_build.yml/badge.svg)](https://github.com/ArduPilot/ardupilot/actions/workflows/macos_build.yml)
+## 1. SITL on QNX
 
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/5331/badge.svg)](https://scan.coverity.com/projects/ardupilot-ardupilot)
+SITL (Software In The Loop) runs ArduPilot with its built-in physics
+simulator. Running it on QNX tests the toolchain, the C library and the
+operating system with a vehicle that flies, before any hardware driver
+exists. Target: the QNX 8.0 AArch64 QEMU VM.
 
-[![Test Coverage](https://github.com/ArduPilot/ardupilot/actions/workflows/test_coverage.yml/badge.svg?branch=master)](https://github.com/ArduPilot/ardupilot/actions/workflows/test_coverage.yml)
+| Step                                                          | Status      | Notes |
+|---------------------------------------------------------------|-------------|-------|
+| Configure `--board sitl --toolchain ntoaarch64`               | Partial     | Works only when `-D_QNX_SOURCE` and `-lsocket` are passed through environment variables |
+| QNX flags in the SITL board (`_QNX_SOURCE`, `socket`, CAN off) | Not started | Move into `boards.py`, shared with the `qnx` board |
+| POSIX filesystem `dirent` adapter                             | Not started | **Current blocker:** the build stops at 429/1430 because QNX's `struct dirent` has no `d_type` |
+| `AP_HAL_SITL` compiles                                        | Not started | Expect small `__QNX__` guards next to the existing `__APPLE__` ones |
+| `SITL` physics library compiles                               | Not started |       |
+| `arducopter` links                                            | Not started |       |
+| Runs on the QNX VM                                            | Not started |       |
+| MAVLink over TCP from the host                                | Not started | Connect MAVProxy or QGroundControl to `<target-ip>:5760` |
+| AUTO mission flown                                            | Not started | Completion criterion for this table |
 
-[![Autotest Status](https://autotest.ardupilot.org/autotest-badge.svg)](https://autotest.ardupilot.org/)
+## 2. QNX HAL peripherals (`AP_HAL_QNX`)
 
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10598/badge)](https://www.bestpractices.dev/projects/10598)
+Generic QNX support that any real board needs. Built with `--board qnx`.
 
-ArduPilot is the most advanced, full-featured, and reliable open source autopilot software available.
-It has been under development since 2010 by a diverse team of professional engineers, computer scientists, and community contributors.
-Our autopilot software is capable of controlling almost any vehicle system imaginable, from conventional airplanes, quad planes, multi-rotors, and helicopters to rovers, boats, balance bots, and even submarines.
-It is continually being expanded to provide support for new emerging vehicle types.
+| Component                            | Status      | Notes |
+|--------------------------------------|-------------|-------|
+| waf `qnx` board                      | Done        | `ntoaarch64` GCC 12.2, defines `_QNX_SOURCE`, links `socket` and `m` |
+| HAL class (`HAL_QNX_Class`)          | Done        | Matches the current `AP_HAL::HAL` constructor |
+| System time and panic (`system.cpp`) | Done        | Uses `CLOCK_MONOTONIC` |
+| Semaphores                           | Partial     | pthread mutex and condition variable. To do: monotonic timeouts (`pthread_mutex_timedlock_monotonic`, `pthread_condattr_setclock`) instead of `CLOCK_REALTIME` and 200 µs polling |
+| Scheduler                            | Stub        | **Current blocker:** no `thread_create`, so startup stops at `Failed to start Logger IO thread`. To do: pthreads with `SCHED_FIFO` priorities, timer and IO threads |
+| Filesystem                           | Partial     | Uses ArduPilot's fixed-size `struct dirent`. No writable backend yet, so scripting and file logging are off |
+| Storage (parameters)                 | Stub        | To do: file-backed storage, as in `AP_HAL_Linux` |
+| UARTDriver                           | Stub        | To do: termios serial ports, plus UDP and TCP for MAVLink |
+| Util                                 | Partial     | Hardware RTC is a stub. To do: `clock_settime`, memory information |
+| I2C                                  | Stub        | To do: on the QNX Raspberry Pi 4 I2C driver |
+| SPI                                  | Stub        | To do: on the QNX Raspberry Pi 4 SPI driver |
+| GPIO                                 | Stub        |       |
+| RCInput                              | Stub        | IcePilot reads RC input through the FPGA, see table 3 |
+| RCOutput                             | Stub        | IcePilot drives outputs through the FPGA, see table 3 |
+| AnalogIn                             | Stub        |       |
+| DSP (gyro FFT)                       | Stub        | Returns no results |
+| CAN                                  | Not planned | Disabled for QNX |
+| WSPI, Flash, OpticalFlow             | Not planned | Not used on this platform |
 
-## The ArduPilot project is made up of
+## 3. IcePilot board
 
-- ArduCopter: [code](https://github.com/ArduPilot/ardupilot/tree/master/ArduCopter), [wiki](https://ardupilot.org/copter/index.html)
+| Item                                                     | Status      | Notes |
+|----------------------------------------------------------|-------------|-------|
+| waf `icepilot` board and `HAL_BOARD_SUBTYPE_QNX_ICEPILOT` | Done        | Subclass of the `qnx` board |
+| `arducopter` builds                                      | Done        | QNX AArch64 executable, about 3.4 MB with debug information |
+| Runs on the QNX AArch64 QEMU VM                          | Partial     | The process starts, then stops at the Scheduler blocker in table 2 |
+| QNX image for the Raspberry Pi 4                         | Not started |       |
+| FPGA register and protocol specification                 | Not started | Needed before any FPGA driver |
+| FPGA bitstream loading                                   | Not started |       |
+| Servo and motor outputs through the FPGA                 | Not started |       |
+| RC input through the FPGA                                | Not started |       |
+| Sensors (IMU, barometer, compass)                        | Not started | Sensor list to be defined |
+| Board configuration (buses, devices, pin map)            | Not started |       |
+| Power monitoring and analog inputs                       | Not started |       |
+| LEDs, buzzer and safety switch (if fitted)               | Not started |       |
+| Start at boot (QNX SLM) as a non-root user               | Not started |       |
+| Bench tests (outputs, failsafes, timing jitter)          | Not started | Required before the first flight |
+| First flight                                             | Not started |       |
 
-- ArduPlane: [code](https://github.com/ArduPilot/ardupilot/tree/master/ArduPlane), [wiki](https://ardupilot.org/plane/index.html)
+## Building
 
-- Rover: [code](https://github.com/ArduPilot/ardupilot/tree/master/Rover), [wiki](https://ardupilot.org/rover/index.html)
+Requirements:
 
-- ArduSub : [code](https://github.com/ArduPilot/ardupilot/tree/master/ArduSub), [wiki](http://ardusub.com/)
+- QNX SDP 8.0 with the AArch64 target
+- Python 3.10 or later with `empy==3.3.4`, `future`, `pexpect` and `dronecan`
 
-- Antenna Tracker : [code](https://github.com/ArduPilot/ardupilot/tree/master/AntennaTracker), [wiki](https://ardupilot.org/antennatracker/index.html)
+```bash
+source <path-to-sdp>/qnxsdp-env.sh
+./waf configure --board icepilot    # or --board qnx
+./waf copter
+```
 
-## User Support & Discussion Forums
+The executable is written to `build/icepilot/bin/arducopter`.
 
-- Support Forum: <https://discuss.ardupilot.org/>
+## Running on a QNX target
 
-- Community Site: <https://ardupilot.org>
+Upload and start the executable through qconn (port 8000) with the SDP
+debugger:
 
-## Developer Information
-
-- Github repository: <https://github.com/ArduPilot/ardupilot>
-
-- Main developer wiki: <https://ardupilot.org/dev/>
-
-- Developer discussion: <https://discuss.ardupilot.org>
-
-- Developer chat: <https://discord.com/channels/ardupilot>
-
-## Top Contributors
-
-- [Flight code contributors](https://github.com/ArduPilot/ardupilot/graphs/contributors)
-- [Wiki contributors](https://github.com/ArduPilot/ardupilot_wiki/graphs/contributors)
-- [Most active support forum users](https://discuss.ardupilot.org/u?order=post_count&period=quarterly)
-- [Partners who contribute financially](https://ardupilot.org/about/Partners)
-
-## How To Get Involved
-
-- The ArduPilot project is open source and we encourage participation and code contributions: [guidelines for contributors to the ardupilot codebase](https://ardupilot.org/dev/docs/contributing.html)
-
-- We have an active group of Beta Testers to help us improve our code: [release procedures](https://ardupilot.org/dev/docs/release-procedures.html)
-
-- Desired Enhancements and Bugs can be posted to the [issues list](https://github.com/ArduPilot/ardupilot/issues).
-
-- Help other users with log analysis in the [support forums](https://discuss.ardupilot.org/)
-
-- Improve the wiki and chat with other [wiki editors on Discord #documentation](https://discord.com/channels/ardupilot)
-
-- Contact the developers on one of the [communication channels](https://ardupilot.org/copter/docs/common-contact-us.html)
+```bash
+source <path-to-sdp>/qnxsdp-env.sh
+ntoaarch64-gdb --batch \
+  -ex "target qnx <target-ip>:8000" \
+  -ex "file build/icepilot/bin/arducopter" \
+  -ex "upload build/icepilot/bin/arducopter /tmp/arducopter" \
+  -ex "set nto-cwd /tmp" \
+  -ex run
+```
 
 ## License
 
@@ -83,81 +123,3 @@ License, version 3 or (at your option) any later version
 - [Overview of license](https://ardupilot.org/dev/docs/license-gplv3.html)
 
 - [Full Text](https://github.com/ArduPilot/ardupilot/blob/master/COPYING.txt)
-
-## Maintainers
-
-ArduPilot is comprised of several parts, vehicles and boards. The list below
-contains the people that regularly contribute to the project and are responsible
-for reviewing patches on their specific area.
-
-- [Andrew Tridgell](https://github.com/tridge):
-  - ***Vehicle***: Plane, AntennaTracker
-  - ***Board***: Pixhawk, Pixhawk2, PixRacer
-- [Francisco Ferreira](https://github.com/oxinarf):
-  - ***Bug Master***
-- [Grant Morphett](https://github.com/gmorph):
-  - ***Vehicle***: Rover
-- [Willian Galvani](https://github.com/williangalvani):
-  - ***Vehicle***: Sub
-  - ***Board***: Navigator
-- [Michael du Breuil](https://github.com/WickedShell):
-  - ***Subsystem***: Batteries
-  - ***Subsystem***: GPS
-  - ***Subsystem***: Scripting
-- [Peter Barker](https://github.com/peterbarker):
-  - ***Subsystem***: DataFlash, Tools
-- [Randy Mackay](https://github.com/rmackay9):
-  - ***Vehicle***: Copter, Rover, AntennaTracker
-- [Siddharth Purohit](https://github.com/bugobliterator):
-  - ***Subsystem***: CAN, Compass
-  - ***Board***: Cube*
-- [Tom Pittenger](https://github.com/magicrub):
-  - ***Vehicle***: Plane
-- [Bill Geyer](https://github.com/bnsgeyer):
-  - ***Vehicle***: TradHeli
-- [Emile Castelnuovo](https://github.com/emilecastelnuovo):
-  - ***Board***: VRBrain
-- [Georgii Staroselskii](https://github.com/staroselskii):
-  - ***Board***: NavIO
-- [Gustavo José de Sousa](https://github.com/guludo):
-  - ***Subsystem***: Build system
-- [Julien Beraud](https://github.com/jberaud):
-  - ***Board***: Bebop & Bebop 2
-- [Leonard Hall](https://github.com/lthall):
-  - ***Subsystem***: Copter attitude control and navigation
-- [Matt Lawrence](https://github.com/Pedals2Paddles):
-  - ***Vehicle***: 3DR Solo & Solo based vehicles
-- [Matthias Badaire](https://github.com/badzz):
-  - ***Subsystem***: FRSky
-- [Mirko Denecke](https://github.com/mirkix):
-  - ***Board***: BBBmini, BeagleBone Blue, PocketPilot
-- [Paul Riseborough](https://github.com/priseborough):
-  - ***Subsystem***: AP_NavEKF2
-  - ***Subsystem***: AP_NavEKF3
-- [Víctor Mayoral Vilches](https://github.com/vmayoral):
-  - ***Board***: PXF, Erle-Brain 2, PXFmini
-- [Amilcar Lucas](https://github.com/amilcarlucas):
-  - ***Subsystem***: Marvelmind
-- [Samuel Tabor](https://github.com/samuelctabor):
-  - ***Subsystem***: Soaring/Gliding
-- [Henry Wurzburg](https://github.com/Hwurzburg):
-  - ***Subsystem***: OSD
-  - ***Site***: Wiki
-- [Peter Hall](https://github.com/IamPete1):
-  - ***Vehicle***: Tailsitters
-  - ***Vehicle***: Sailboat
-  - ***Subsystem***: Scripting
-- [Andy Piper](https://github.com/andyp1per):
-  - ***Subsystem***: Crossfire
-  - ***Subsystem***: ESC
-  - ***Subsystem***: OSD
-  - ***Subsystem***: SmartAudio
-- [Alessandro Apostoli](https://github.com/yaapu):
-  - ***Subsystem***: Telemetry
-  - ***Subsystem***: OSD
-- [Rishabh Singh](https://github.com/rishabsingh3003):
-  - ***Subsystem***: Avoidance/Proximity
-- [David Bussenschutt](https://github.com/davidbuzz):
-  - ***Subsystem***: ESP32,AP_HAL_ESP32
-- [Charles Villard](https://github.com/Silvanosky):
-  - ***Subsystem***: ESP32,AP_HAL_ESP32
