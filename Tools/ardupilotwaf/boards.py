@@ -605,6 +605,13 @@ class Board:
                 '-Wl,--gc-sections',
             ]
 
+        if cfg.env.DEST_OS == 'qnx':
+            # g++ defines _GNU_SOURCE on Linux, but the QNX compiler does
+            # not define the QNX equivalent, without which the QNX C
+            # library hides many POSIX and BSD declarations
+            env.CFLAGS += ['-D_QNX_SOURCE']
+            env.CXXFLAGS += ['-D_QNX_SOURCE']
+
         if self.with_can:
             # for both AP_Perip and main fw enable deadlines
             env.DEFINES.update(CANARD_ENABLE_DEADLINE = 1)
@@ -1768,10 +1775,6 @@ class qnx(Board):
             AP_SIM_ENABLED = 0,
             HAL_FORCE_32BIT = 0,
         )
-
-        # QNX hides most POSIX/BSD declarations behind _QNX_SOURCE
-        env.CFLAGS += ['-D_QNX_SOURCE']
-        env.CXXFLAGS += ['-D_QNX_SOURCE']
 
         if not cfg.env.DEBUG:
             env.CXXFLAGS += ['-O3']
