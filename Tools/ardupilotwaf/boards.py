@@ -1737,3 +1737,47 @@ class WASMBoard(SITLBoard):
         ]
 
 
+class qnx(Board):
+    '''generic QNX AArch64 target (eg. a bare Raspberry Pi 4 running QNX SDP 8)'''
+    # call the QNX GCC drivers directly (ntoaarch64-gcc / ntoaarch64-g++),
+    # found on PATH once the SDP environment has been sourced
+    toolchain = 'ntoaarch64'
+
+    def __init__(self):
+        super().__init__()
+        self.with_can = False
+
+    def configure_env(self, cfg, env):
+        super().configure_env(cfg, env)
+
+        env.BOARD_CLASS = "QNX"
+
+        env.DEFINES.update(
+            CONFIG_HAL_BOARD = 'HAL_BOARD_QNX',
+            CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_NONE',
+            AP_SIM_ENABLED = 0,
+            HAL_FORCE_32BIT = 0,
+        )
+
+        # QNX hides most POSIX/BSD declarations behind _QNX_SOURCE
+        env.CFLAGS += ['-D_QNX_SOURCE']
+        env.CXXFLAGS += ['-D_QNX_SOURCE']
+
+        if not cfg.env.DEBUG:
+            env.CXXFLAGS += ['-O3']
+
+        # unlike glibc, the QNX C library keeps sockets and the math
+        # functions in separate libraries
+        env.LIB += [
+            'socket',
+            'm',
+        ]
+
+        env.AP_LIBRARIES += [
+            'AP_HAL_QNX',
+        ]
+
+    def get_name(self):
+        return self.__class__.__name__
+
+
