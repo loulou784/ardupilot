@@ -12,6 +12,9 @@ change they describe.
 
 ## Status legend
 
+Steps are numbered by table: 2.5 is the fifth row of table 2. Use these
+numbers to refer to a step in commits and issues.
+
 | Status      | Meaning                                                    |
 |-------------|------------------------------------------------------------|
 | Done        | Implemented and verified                                   |
@@ -27,62 +30,62 @@ simulator. Running it on QNX tests the toolchain, the C library and the
 operating system with a vehicle that flies, before any hardware driver
 exists. Target: the QNX 8.0 AArch64 QEMU VM.
 
-| Step                                                          | Status      | Notes |
-|---------------------------------------------------------------|-------------|-------|
-| Configure `--board sitl --toolchain ntoaarch64`               | Partial     | Works only when `-D_QNX_SOURCE` and `-lsocket` are passed through environment variables |
-| QNX flags in the SITL board (`_QNX_SOURCE`, `socket`, CAN off) | Not started | Move into `boards.py`, shared with the `qnx` board |
-| POSIX filesystem `dirent` adapter                             | Not started | **Current blocker:** the build stops at 429/1430 because QNX's `struct dirent` has no `d_type` |
-| `AP_HAL_SITL` compiles                                        | Not started | Expect small `__QNX__` guards next to the existing `__APPLE__` ones |
-| `SITL` physics library compiles                               | Not started |       |
-| `arducopter` links                                            | Not started |       |
-| Runs on the QNX VM                                            | Not started |       |
-| MAVLink over TCP from the host                                | Not started | Connect MAVProxy or QGroundControl to `<target-ip>:5760` |
-| AUTO mission flown                                            | Not started | Completion criterion for this table |
+| #    | Step                                                          | Status      | Notes |
+|------|---------------------------------------------------------------|-------------|-------|
+| 1.1  | Configure `--board sitl --toolchain ntoaarch64`               | Partial     | Works only when `-D_QNX_SOURCE` and `-lsocket` are passed through environment variables |
+| 1.2  | QNX flags in the SITL board (`_QNX_SOURCE`, `socket`, CAN off) | Not started | Move into `boards.py`, shared with the `qnx` board |
+| 1.3  | POSIX filesystem `dirent` adapter                             | Not started | **Current blocker:** the build stops at 429/1430 because QNX's `struct dirent` has no `d_type` |
+| 1.4  | `AP_HAL_SITL` compiles                                        | Not started | Expect small `__QNX__` guards next to the existing `__APPLE__` ones |
+| 1.5  | `SITL` physics library compiles                               | Not started |       |
+| 1.6  | `arducopter` links                                            | Not started |       |
+| 1.7  | Runs on the QNX VM                                            | Not started |       |
+| 1.8  | MAVLink over TCP from the host                                | Not started | Connect MAVProxy or QGroundControl to `<target-ip>:5760` |
+| 1.9  | AUTO mission flown                                            | Not started | Completion criterion for this table |
 
 ## 2. QNX HAL peripherals (`AP_HAL_QNX`)
 
 Generic QNX support that any real board needs. Built with `--board qnx`.
 
-| Component                            | Status      | Notes |
-|--------------------------------------|-------------|-------|
-| waf `qnx` board                      | Done        | `ntoaarch64` GCC 12.2, defines `_QNX_SOURCE`, links `socket` and `m` |
-| HAL class (`HAL_QNX_Class`)          | Done        | Matches the current `AP_HAL::HAL` constructor |
-| System time and panic (`system.cpp`) | Done        | Uses `CLOCK_MONOTONIC` |
-| Semaphores                           | Partial     | pthread mutex and condition variable. To do: monotonic timeouts (`pthread_mutex_timedlock_monotonic`, `pthread_condattr_setclock`) instead of `CLOCK_REALTIME` and 200 µs polling |
-| Scheduler                            | Stub        | **Current blocker:** no `thread_create`, so startup stops at `Failed to start Logger IO thread`. To do: pthreads with `SCHED_FIFO` priorities, timer and IO threads |
-| Filesystem                           | Partial     | Uses ArduPilot's fixed-size `struct dirent`. No writable backend yet, so scripting and file logging are off |
-| Storage (parameters)                 | Stub        | To do: file-backed storage, as in `AP_HAL_Linux` |
-| UARTDriver                           | Stub        | To do: termios serial ports, plus UDP and TCP for MAVLink |
-| Util                                 | Partial     | Hardware RTC is a stub. To do: `clock_settime`, memory information |
-| I2C                                  | Stub        | To do: on the QNX Raspberry Pi 4 I2C driver |
-| SPI                                  | Stub        | To do: on the QNX Raspberry Pi 4 SPI driver |
-| GPIO                                 | Stub        |       |
-| RCInput                              | Stub        | IcePilot reads RC input through the FPGA, see table 3 |
-| RCOutput                             | Stub        | IcePilot drives outputs through the FPGA, see table 3 |
-| AnalogIn                             | Stub        |       |
-| DSP (gyro FFT)                       | Stub        | Returns no results |
-| CAN                                  | Not planned | Disabled for QNX |
-| WSPI, Flash, OpticalFlow             | Not planned | Not used on this platform |
+| #    | Component                            | Status      | Notes |
+|------|--------------------------------------|-------------|-------|
+| 2.1  | waf `qnx` board                      | Done        | `ntoaarch64` GCC 12.2, defines `_QNX_SOURCE`, links `socket` and `m` |
+| 2.2  | HAL class (`HAL_QNX_Class`)          | Done        | Matches the current `AP_HAL::HAL` constructor |
+| 2.3  | System time and panic (`system.cpp`) | Done        | Uses `CLOCK_MONOTONIC` |
+| 2.4  | Semaphores                           | Partial     | pthread mutex and condition variable. To do: monotonic timeouts (`pthread_mutex_timedlock_monotonic`, `pthread_condattr_setclock`) instead of `CLOCK_REALTIME` and 200 µs polling |
+| 2.5  | Scheduler                            | Stub        | **Current blocker:** no `thread_create`, so startup stops at `Failed to start Logger IO thread`. To do: pthreads with `SCHED_FIFO` priorities, timer and IO threads |
+| 2.6  | Filesystem                           | Partial     | Uses ArduPilot's fixed-size `struct dirent`. No writable backend yet, so scripting and file logging are off. The POSIX `dirent` adapter (1.3) unblocks this |
+| 2.7  | Storage (parameters)                 | Stub        | To do: file-backed storage, as in `AP_HAL_Linux` |
+| 2.8  | UARTDriver                           | Stub        | To do: termios serial ports, plus UDP and TCP for MAVLink |
+| 2.9  | Util                                 | Partial     | Hardware RTC is a stub. To do: `clock_settime`, memory information |
+| 2.10 | I2C                                  | Stub        | To do: on the QNX Raspberry Pi 4 I2C driver |
+| 2.11 | SPI                                  | Stub        | To do: on the QNX Raspberry Pi 4 SPI driver |
+| 2.12 | GPIO                                 | Stub        |       |
+| 2.13 | RCInput                              | Stub        | IcePilot reads RC input through the FPGA, see 3.8 |
+| 2.14 | RCOutput                             | Stub        | IcePilot drives outputs through the FPGA, see 3.7 |
+| 2.15 | AnalogIn                             | Stub        |       |
+| 2.16 | DSP (gyro FFT)                       | Stub        | Returns no results |
+| 2.17 | CAN                                  | Not planned | Disabled for QNX |
+| 2.18 | WSPI, Flash, OpticalFlow             | Not planned | Not used on this platform |
 
 ## 3. IcePilot board
 
-| Item                                                     | Status      | Notes |
-|----------------------------------------------------------|-------------|-------|
-| waf `icepilot` board and `HAL_BOARD_SUBTYPE_QNX_ICEPILOT` | Done        | Subclass of the `qnx` board |
-| `arducopter` builds                                      | Done        | QNX AArch64 executable, about 3.4 MB with debug information |
-| Runs on the QNX AArch64 QEMU VM                          | Partial     | The process starts, then stops at the Scheduler blocker in table 2 |
-| QNX image for the Raspberry Pi 4                         | Not started |       |
-| FPGA register and protocol specification                 | Not started | Needed before any FPGA driver |
-| FPGA bitstream loading                                   | Not started |       |
-| Servo and motor outputs through the FPGA                 | Not started |       |
-| RC input through the FPGA                                | Not started |       |
-| Sensors (IMU, barometer, compass)                        | Not started | Sensor list to be defined |
-| Board configuration (buses, devices, pin map)            | Not started |       |
-| Power monitoring and analog inputs                       | Not started |       |
-| LEDs, buzzer and safety switch (if fitted)               | Not started |       |
-| Start at boot (QNX SLM) as a non-root user               | Not started |       |
-| Bench tests (outputs, failsafes, timing jitter)          | Not started | Required before the first flight |
-| First flight                                             | Not started |       |
+| #    | Item                                                     | Status      | Notes |
+|------|----------------------------------------------------------|-------------|-------|
+| 3.1  | waf `icepilot` board and `HAL_BOARD_SUBTYPE_QNX_ICEPILOT` | Done        | Subclass of the `qnx` board |
+| 3.2  | `arducopter` builds                                      | Done        | QNX AArch64 executable, about 3.4 MB with debug information |
+| 3.3  | Runs on the QNX AArch64 QEMU VM                          | Partial     | The process starts, then stops at the Scheduler blocker (2.5) |
+| 3.4  | QNX image for the Raspberry Pi 4                         | Not started |       |
+| 3.5  | FPGA register and protocol specification                 | Not started | Needed before 3.6 to 3.8 |
+| 3.6  | FPGA bitstream loading                                   | Not started |       |
+| 3.7  | Servo and motor outputs through the FPGA                 | Not started |       |
+| 3.8  | RC input through the FPGA                                | Not started |       |
+| 3.9  | Sensors (IMU, barometer, compass)                        | Not started | Sensor list to be defined |
+| 3.10 | Board configuration (buses, devices, pin map)            | Not started |       |
+| 3.11 | Power monitoring and analog inputs                       | Not started |       |
+| 3.12 | LEDs, buzzer and safety switch (if fitted)               | Not started |       |
+| 3.13 | Start at boot (QNX SLM) as a non-root user               | Not started |       |
+| 3.14 | Bench tests (outputs, failsafes, timing jitter)          | Not started | Required before the first flight |
+| 3.15 | First flight                                             | Not started |       |
 
 ## Building
 
