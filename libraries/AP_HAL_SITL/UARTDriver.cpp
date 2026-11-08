@@ -37,6 +37,10 @@
 #include <netinet/tcp.h>
 #include <sys/select.h>
 #include <termios.h>
+#if defined(__QNX__) && !defined(CRTSCTS)
+// QNX splits RTS/CTS hardware flow control into IHFLOW and OHFLOW
+#define CRTSCTS (IHFLOW | OHFLOW)
+#endif
 #include <sys/time.h>
 #include <arpa/inet.h>
 #if HAL_SITL_WASM_ENABLED
