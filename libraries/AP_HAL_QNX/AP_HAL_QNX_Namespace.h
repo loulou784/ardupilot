@@ -13,6 +13,7 @@ namespace QNX {
     class RCOutput;
     class Scheduler;
     class Semaphore;
+    class BinarySemaphore;
     class SPIDevice;
     class SPIDeviceDriver;
     class SPIDeviceManager;
