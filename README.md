@@ -45,9 +45,9 @@ exists. Target: the QNX 8.0 AArch64 QEMU VM.
 | 1.2  | QNX build flags (`_QNX_SOURCE`, `libsocket`, CAN)             | Done        | `_QNX_SOURCE` for every QNX build, as g++ defines `_GNU_SOURCE` on Linux. A `libsocket` configure check modelled on the `librt` one. SocketCAN decided by the target OS, so SITL on QNX uses multicast CAN, as on macOS |
 | 1.3  | POSIX filesystem `dirent` adapter                             | Done        | Every QNX target uses ArduPilot's fixed-size `struct dirent`. The POSIX backend copies each entry from QNX's and takes its type from `fstatat()`, as the FATFS backend does. Disk space uses `statvfs()`. Compiles; directory listing is first exercised when SITL runs (1.7) |
 | 1.4  | `AP_HAL_SITL` compiles                                        | Done        | Serial speed through standard `termios`, `CRTSCTS` defined as `IHFLOW \| OHFLOW`, and `O_SYNC` without `O_DIRECT`, as on OpenBSD. `sparse-endian.h` uses QNX's byte order functions |
-| 1.5  | `SITL` physics library and other libraries compile            | Partial     | **Current blocker.** The physics library compiles unchanged. lwIP (used by AP_Networking) redefines `struct iovec`, which QNX already defines |
-| 1.6  | `arducopter` links                                            | Not started |       |
-| 1.7  | Runs on the QNX VM                                            | Not started |       |
+| 1.5  | `SITL` physics library and other libraries compile            | Done        | The physics library compiles unchanged. lwIP (used by AP_Networking) uses QNX's `struct iovec`, set in `lwipopts.h` next to the existing macOS settings |
+| 1.6  | `arducopter` links                                            | Done        | QNX AArch64 executable, about 6.4 MB with debug information, linked with `libsocket`. The malloc wrapper is in and waf's symbol check passes. The whole build has no warnings |
+| 1.7  | Runs on the QNX VM                                            | Not started | **Next step**       |
 | 1.8  | MAVLink over TCP from the host                                | Not started | Connect MAVProxy or QGroundControl to `<target-ip>:5760` |
 | 1.9  | AUTO mission flown                                            | Not started | Completion criterion for this table |
 
@@ -113,6 +113,7 @@ QNX column is the planned approach.
 | Hardware flow control    | `CRTSCTS`                        | `IHFLOW \| OHFLOW`                          | QNX has separate input and output flags |
 | Unbuffered serial writes (SITL) | `O_DIRECT \| O_SYNC`      | `O_SYNC`, as on OpenBSD                     | QNX has no `O_DIRECT` |
 | Byte order functions     | ArduPilot's own                  | QNX's, from `net/netbyte.h`                 | QNX declares them as functions, which clash with ArduPilot's |
+| lwIP `struct iovec`      | lwIP's own                       | QNX's                                       | QNX defines it in every file, through `sys/platform.h`; Linux only in `sys/uio.h`, which lwIP does not include |
 | Event loop (`Poller`)    | `epoll`, `eventfd`, `timerfd`    | `poll()` or QNX pulses                      | Not available on QNX |
 | SPI and I2C              | `spidev`, `i2c-dev`              | QNX SPI and I2C drivers                     | Different driver interfaces |
 | GPIO and PWM             | sysfs, `/dev/mem`                | QNX GPIO driver, `mmap_device_memory()`     | No sysfs on QNX |
@@ -132,6 +133,16 @@ source <path-to-sdp>/qnxsdp-env.sh
 ```
 
 The executable is written to `build/icepilot/bin/arducopter`.
+
+SITL for QNX builds the same way, with its own board:
+
+```bash
+source <path-to-sdp>/qnxsdp-env.sh
+./waf configure --board SITL_aarch64_qnx
+./waf copter
+```
+
+The executable is written to `build/SITL_aarch64_qnx/bin/arducopter`.
 
 ## Running on a QNX target
 
