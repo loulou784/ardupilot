@@ -1,7 +1,8 @@
 # ArduPilot on QNX
 
-This branch ports ArduPilot to QNX SDP 8.0 on AArch64. The target board
-is IcePilot: a Raspberry Pi 4 with an iCE40UP5K I/O FPGA.
+This branch ports ArduPilot to QNX SDP 8.0 on AArch64, and benchmarks it
+against the regular Linux build of ArduPilot. The target board is
+IcePilot: a Raspberry Pi 4 with an iCE40UP5K I/O FPGA.
 
 For general ArduPilot documentation, see the
 [upstream README](https://github.com/ArduPilot/ardupilot/blob/master/README.md)
@@ -12,12 +13,25 @@ at the end of each step.
 
 ## Approach
 
-The port follows `AP_HAL_Linux` and the Linux boards as closely as
-possible. Backends are ported from `AP_HAL_Linux` file by file: one
-commit copies the Linux file, the next adapts it to QNX, so each change
-can be reviewed against Linux. QNX code differs from Linux only where
-QNX itself differs; those places are listed in
+**Shared code** (SITL, `AP_Filesystem`, the build system and other code
+every platform compiles) follows the Linux port as closely as possible.
+It differs from Linux only where QNX itself differs, and those places
+are listed in
 [Differences from the Linux port](#differences-from-the-linux-port).
+
+**`AP_HAL_QNX`** is optimized for QNX, and the device is benchmarked
+against the Linux build (table 4). It is built in four stages: port,
+measure, optimize, measure.
+
+1. Each backend is ported from `AP_HAL_Linux` file by file: one commit
+   copies the Linux file, the next adapts it to QNX. The first QNX HAL
+   therefore has Linux's design, and is a like-for-like baseline.
+2. QNX-native optimizations follow as separate commits, each behind a
+   build option, so every gain can be measured on its own (2.19 onward).
+
+The `AP_HAL` interfaces stay the same as on Linux, so everything above
+the HAL is the same code on both systems, and board drivers are written
+against the `AP_HAL` device interfaces so that they run under both.
 
 ## Status legend
 
@@ -56,27 +70,34 @@ exists. Target: the QNX 8.0 AArch64 QEMU VM.
 ## 2. QNX HAL peripherals (`AP_HAL_QNX`)
 
 Generic QNX support that any real board needs. Built with `--board qnx`.
+Rows 2.1 to 2.18 port `AP_HAL_Linux`; rows 2.19 onward are QNX-native
+optimizations, each behind a build option and measured in table 4.
 
 | #    | Component                            | Status      | Notes |
 |------|--------------------------------------|-------------|-------|
 | 2.1  | QNX boards                           | Partial     | Python classes `qnx` and `icepilot` for now, using `ntoaarch64` GCC 12.2. To do, as for `LinuxBoard`: a `QNXBoard` class with boards in `libraries/AP_HAL_QNX/hwdef/`, the malloc wrapper that zeroes allocations, and `-pthread` |
 | 2.2  | HAL class (`HAL_QNX_Class`)          | Done        | Matches the current `AP_HAL::HAL` constructor |
 | 2.3  | System time and panic (`system.cpp`) | Partial     | Same as `AP_HAL_Linux`, using `CLOCK_MONOTONIC`. To do: the stopped-clock support, with the Scheduler (2.5) |
-| 2.4  | Semaphores                           | Done        | Same as `AP_HAL_Linux`: pthread mutex and condition variable |
-| 2.5  | Scheduler                            | Stub        | **Current blocker:** no `thread_create`, so startup stops at `Failed to start Logger IO thread`. To do: port `Scheduler` and `Thread` from `AP_HAL_Linux` |
+| 2.4  | Semaphores                           | Done        | Same as `AP_HAL_Linux`: pthread mutex and condition variable. Optimization: 2.23 |
+| 2.5  | Scheduler                            | Stub        | **Current blocker:** no `thread_create`, so startup stops at `Failed to start Logger IO thread`. To do: port `Scheduler` and `Thread` from `AP_HAL_Linux`. Optimization: 2.19 |
 | 2.6  | Filesystem                           | Partial     | Uses ArduPilot's fixed-size `struct dirent`. No writable backend yet, so scripting and file logging are off. To do: enable the POSIX backend, which works on QNX since 1.3 |
 | 2.7  | Storage (parameters)                 | Stub        | To do: port the file-backed `Storage` from `AP_HAL_Linux` |
 | 2.8  | UARTDriver                           | Stub        | To do: port `UARTDriver` and its serial, UDP and TCP devices from `AP_HAL_Linux` |
 | 2.9  | Util                                 | Partial     | Hardware RTC is a stub. To do: port `Util` from `AP_HAL_Linux` |
 | 2.10 | I2C                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 I2C driver instead of `i2c-dev` |
-| 2.11 | SPI                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 SPI driver instead of `spidev` |
-| 2.12 | GPIO                                 | Stub        | To do: on the QNX GPIO driver instead of sysfs and `/dev/mem` |
+| 2.11 | SPI                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 SPI driver instead of `spidev`. Optimization: 2.21 |
+| 2.12 | GPIO                                 | Stub        | To do: on the QNX GPIO driver, or `mmap_device_memory()`, instead of sysfs and `/dev/mem` |
 | 2.13 | RCInput                              | Stub        | IcePilot reads RC input through the FPGA, see 3.8 |
 | 2.14 | RCOutput                             | Stub        | IcePilot drives outputs through the FPGA, see 3.7 |
 | 2.15 | AnalogIn                             | Stub        |       |
 | 2.16 | DSP (gyro FFT)                       | Stub        | Returns no results |
 | 2.17 | CAN                                  | Not planned | Disabled for QNX |
 | 2.18 | WSPI, Flash, OpticalFlow             | Not planned | Not used on this platform |
+| 2.19 | Optimization: scheduler timers       | Not started | High-resolution timers that wake threads with pulses, and a tuned `ClockPeriod`, instead of sleeping. Measure: main-loop jitter |
+| 2.20 | Optimization: event loop             | Not started | Pulses and `ionotify` instead of the ported `poll()` loop. Measure: wake-up latency |
+| 2.21 | Optimization: IMU SPI path           | Not started | Direct SPI controller access with interrupts handled in ArduPilot, instead of going through the SPI driver. Measure: transfer time and IMU sample regularity |
+| 2.22 | Optimization: CPU partitioning       | Not started | Adaptive partitioning, guaranteeing the flight code a CPU budget even when the system is overloaded. Measure: loop timing with a background CPU hog |
+| 2.23 | Optimization: semaphore timeouts     | Not started | Monotonic timeouts (`pthread_mutex_timedlock_monotonic`, `pthread_condattr_setclock`) instead of polling and `CLOCK_REALTIME`. Measure: lock latency |
 
 ## 3. IcePilot board
 
@@ -94,15 +115,37 @@ Generic QNX support that any real board needs. Built with `--board qnx`.
 | 3.10 | Board configuration (buses, devices, pin map)            | Not started | In `libraries/AP_HAL_QNX/hwdef/icepilot/hwdef.dat`, as for Linux boards such as `navio2` |
 | 3.11 | Power monitoring and analog inputs                       | Not started |       |
 | 3.12 | LEDs, buzzer and safety switch (if fitted)               | Not started |       |
-| 3.13 | Start at boot (QNX SLM) as a non-root user               | Not started |       |
+| 3.13 | Start at boot (QNX SLM) as a non-root user               | Not started | With restart on failure (SLM or the High Availability Manager). Measure restart time in table 4 |
 | 3.14 | Bench tests (outputs, failsafes, timing jitter)          | Not started | Required before the first flight |
 | 3.15 | First flight                                             | Not started |       |
+
+## 4. Benchmark against Linux
+
+The same IcePilot hardware runs the regular Linux build of ArduPilot
+and the QNX build, so that the two can be compared with numbers. Only
+the operating system and its HAL differ: same ArduPilot commit,
+parameters, enabled features and compiler family.
+
+| #    | Step                                  | Status      | Notes |
+|------|---------------------------------------|-------------|-------|
+| 4.1  | IcePilot Linux build                  | Not started | A Linux hwdef, `libraries/AP_HAL_Linux/hwdef/icepilot/`, with the FPGA driver written against `AP_HAL::SPIDevice` so both builds run the same driver |
+| 4.2  | Linux test images                     | Not started | Raspberry Pi OS with its stock kernel and with a PREEMPT_RT kernel. **To decide:** one or both (both recommended) |
+| 4.3  | Like-for-like builds                  | Not started | Same ArduPilot commit and parameters, the same features enabled (on QNX this needs 2.6), GCC 12 and `-O3` on both |
+| 4.4  | Benchmark harness                     | Not started | A script that collects the `PM` log messages and `@SYS/tasks.txt`, `timers.txt` and `threads.txt` over MAVLink FTP, repeats each run and produces one comparison table |
+| 4.5  | CPU microbenchmarks                   | Not started | ArduPilot's `AP_Math` benchmarks (Google Benchmark), run on both systems |
+| 4.6  | External timing                       | Not started | Main-loop jitter (minimum, average, 99th percentile, maximum) and IMU-to-motor latency. **To decide:** a logic analyzer, or timestamps from the IcePilot FPGA (part of 3.5) |
+| 4.7  | Workloads                             | Not started | Idle, full logging, high-rate telemetry, scripting, a background CPU hog, and a network flood |
+| 4.8  | Baseline results                      | Not started | Linux stock kernel, Linux PREEMPT_RT, and QNX as ported (2.1 to 2.16), before any optimization |
+| 4.9  | Optimization results                  | Not started | Each QNX optimization (2.19 to 2.23) measured on its own against the QNX baseline and against Linux |
+| 4.10 | Recovery and startup                  | Not started | Boot-to-ready time, and restart time after ArduPilot is killed (3.13) |
 
 ## Differences from the Linux port
 
 Each of these follows from a real difference between QNX and Linux, and
 is commented where it appears in the code. For steps not done yet, the
-QNX column is the planned approach.
+QNX column is the planned approach. Deliberate QNX optimizations of
+`AP_HAL_QNX`, which go beyond what Linux does, are listed in table 2
+from 2.19 onward.
 
 | Area                     | Linux port                       | QNX port                                    | Reason |
 |--------------------------|----------------------------------|---------------------------------------------|--------|
