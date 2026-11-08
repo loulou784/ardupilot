@@ -924,7 +924,10 @@ class SITLBoard(Board):
                 # needed for cygwin
                 env.CXXFLAGS += [ '-DCANARD_64_BIT=1' ]
                 env.CFLAGS += [ '-DCANARD_64_BIT=1' ]
-            if Utils.unversioned_sys_platform().startswith("linux"):
+            # SocketCAN is a Linux interface: decide by the target OS, not
+            # the build host, so cross builds for other systems use
+            # multicast CAN only
+            if cfg.env.DEST_OS == 'linux':
                 cfg.define('HAL_CAN_WITH_SOCKETCAN', 1)
             else:
                 cfg.define('HAL_CAN_WITH_SOCKETCAN', 0)
