@@ -1781,3 +1781,14 @@ class qnx(Board):
         return self.__class__.__name__
 
 
+class icepilot(qnx):
+    '''IcePilot autopilot HAT: Raspberry Pi 4 + iCE40UP5K I/O FPGA, running QNX'''
+
+    def configure_env(self, cfg, env):
+        super().configure_env(cfg, env)
+
+        env.DEFINES.update(
+            CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_QNX_ICEPILOT',
+        )
+
+
