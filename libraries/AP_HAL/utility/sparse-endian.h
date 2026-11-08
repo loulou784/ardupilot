@@ -44,6 +44,11 @@ typedef uint32_t __ap_bitwise be32_t;
 typedef uint64_t __ap_bitwise le64_t;
 typedef uint64_t __ap_bitwise be64_t;
 
+#if defined(__QNX__)
+// QNX declares these as functions in net/netbyte.h, which netinet/in.h
+// includes, and implements them as macros: use QNX's
+#include <net/netbyte.h>
+#else
 #undef htobe16
 #undef htole16
 #undef be16toh
@@ -56,6 +61,7 @@ typedef uint64_t __ap_bitwise be64_t;
 #undef htole64
 #undef be64toh
 #undef le64toh
+#endif // __QNX__
 
 #if !defined (__BYTE_ORDER) && defined (__OpenBSD__)
 #define __BYTE_ORDER __BYTE_ORDER__
@@ -79,6 +85,7 @@ typedef uint64_t __ap_bitwise be64_t;
 #define bswap_64_on_be(x) __bswap_64(x)
 #endif
 
+#if !defined(__QNX__)
 static inline le16_t htole16(uint16_t value) { return (le16_t __ap_force) bswap_16_on_be(value); }
 static inline le32_t htole32(uint32_t value) { return (le32_t __ap_force) bswap_32_on_be(value); }
 static inline le64_t htole64(uint64_t value) { return (le64_t __ap_force) bswap_64_on_be(value); }
@@ -94,6 +101,7 @@ static inline uint64_t le64toh(le64_t value) { return bswap_64_on_be((uint64_t _
 static inline uint16_t be16toh(be16_t value) { return bswap_16_on_le((uint16_t __ap_force)value); }
 static inline uint32_t be32toh(be32_t value) { return bswap_32_on_le((uint32_t __ap_force)value); }
 static inline uint64_t be64toh(be64_t value) { return bswap_64_on_le((uint64_t __ap_force)value); }
+#endif // !__QNX__
 
 // methods for misaligned buffers
 static inline uint16_t le16toh_ptr(const uint8_t *p) { return p[0] | (p[1]<<8U); }
