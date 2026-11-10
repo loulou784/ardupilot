@@ -9,10 +9,10 @@
 
 using namespace QNX;
 
-static UARTDriver serial0Driver;
-static UARTDriver serial1Driver;
-static UARTDriver serial2Driver;
-static UARTDriver serial3Driver;
+static UARTDriver serial0Driver(true);
+static UARTDriver serial1Driver(false);
+static UARTDriver serial2Driver(false);
+static UARTDriver serial3Driver(false);
 static I2CDeviceManager i2cDeviceManager;
 static SPIDeviceManager spiDeviceManager;
 static WSPIDeviceManager wspiDeviceManager;
