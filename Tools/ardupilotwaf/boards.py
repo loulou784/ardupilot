@@ -738,6 +738,10 @@ def add_dynamic_boards_linux():
     '''add boards based on existence of hwdef.dat in subdirectories for '''
     add_dynamic_boards_from_hwdef_dir(LinuxBoard, 'libraries/AP_HAL_Linux/hwdef')
 
+def add_dynamic_boards_qnx():
+    '''add boards based on existence of hwdef.dat in subdirectories for QNX'''
+    add_dynamic_boards_from_hwdef_dir(QNXBoard, 'libraries/AP_HAL_QNX/hwdef')
+
 def add_dynamic_boards_qurt():
     '''add boards based on existence of hwdef.dat in subdirectories for '''
     add_dynamic_boards_from_hwdef_dir(QURTBoard, 'libraries/AP_HAL_QURT/hwdef')
@@ -775,6 +779,7 @@ def get_boards_names():
     add_dynamic_boards_chibios()
     add_dynamic_boards_esp32()
     add_dynamic_boards_linux()
+    add_dynamic_boards_qnx()
     add_dynamic_boards_qurt()
     add_dynamic_boards_sitl()
 
@@ -1758,15 +1763,38 @@ class WASMBoard(SITLBoard):
         ]
 
 
-class qnx(Board):
-    '''generic QNX AArch64 target (eg. a bare Raspberry Pi 4 running QNX SDP 8)'''
-    # call the QNX GCC drivers directly (ntoaarch64-gcc / ntoaarch64-g++),
-    # found on PATH once the SDP environment has been sourced
-    toolchain = 'ntoaarch64'
+class QNXBoard(Board):
+    '''an abstract base class for QNX boards to inherit from, following
+    LinuxBoard'''
+    abstract = True
 
     def __init__(self):
         super().__init__()
+
         self.with_can = False
+
+    def configure(self, cfg):
+        if hasattr(self, 'hwdef'):
+            cfg.env.HWDEF = self.hwdef
+
+        # load hwdef, extract toolchain from cfg.env:
+        cfg.load('qnx')
+        if cfg.env.TOOLCHAIN:
+            self.toolchain = cfg.env.TOOLCHAIN
+        else:
+            # default tool-chain for QNX boards: the QNX SDP GCC drivers
+            # (ntoaarch64-gcc / ntoaarch64-g++), found on PATH once the
+            # SDP environment has been sourced
+            self.toolchain = 'ntoaarch64'
+
+        super().configure(cfg)
+
+        # The QNX C library has no symbol versioning, so libc++.so
+        # references a plain malloc, which --wrap,malloc rewrites into an
+        # undefined __wrap_malloc.  waf's configure checks link none of our
+        # code, so with the wrapper every check that links C++ fails; add
+        # it only now that they have run, as SITLBoard does on QNX.
+        cfg.env.LINKFLAGS += ['-Wl,--wrap,malloc']
 
     def configure_env(self, cfg, env):
         super().configure_env(cfg, env)
@@ -1775,36 +1803,40 @@ class qnx(Board):
 
         env.DEFINES.update(
             CONFIG_HAL_BOARD = 'HAL_BOARD_QNX',
-            CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_NONE',
             AP_SIM_ENABLED = 0,
             HAL_FORCE_32BIT = 0,
         )
 
         if not cfg.env.DEBUG:
-            env.CXXFLAGS += ['-O3']
+            env.CXXFLAGS += [
+                '-O3',
+            ]
 
         env.LIB += [
             'm',
         ]
 
+        cfg.check_librt(env)
+        cfg.check_libdl(env)
+        # sockets are in libsocket on QNX, not in the C library
         cfg.check_libsocket(env)
+        # no check_lttng() or check_libiio(): LTTng and the IIO subsystem
+        # are Linux-only
 
+        env.LINKFLAGS += ['-pthread',]
         env.AP_LIBRARIES += [
             'AP_HAL_QNX',
         ]
 
+        # wrap malloc to ensure memory is zeroed; the -Wl,--wrap,malloc
+        # flag itself is added in configure(), after the configure checks
+        env.CHECK_MALLOC_WRAPPING = True
+
+        if cfg.options.apstatedir:
+            cfg.define('AP_STATEDIR', cfg.options.apstatedir)
+
     def get_name(self):
+        # get name of class
         return self.__class__.__name__
-
-
-class icepilot(qnx):
-    '''IcePilot autopilot HAT: Raspberry Pi 4 + iCE40UP5K I/O FPGA, running QNX'''
-
-    def configure_env(self, cfg, env):
-        super().configure_env(cfg, env)
-
-        env.DEFINES.update(
-            CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_QNX_ICEPILOT',
-        )
 
 
