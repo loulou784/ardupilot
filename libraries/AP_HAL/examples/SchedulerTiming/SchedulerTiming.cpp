@@ -19,6 +19,8 @@
 
   - the period of the timer thread, through a registered timer process
   - how long delay_microseconds() really waits, from the main thread
+  - how soon a thread waiting on a semaphore wakes when another thread
+    gives or signals it, and how long semaphore timeouts really last
 */
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
@@ -51,8 +53,62 @@ struct Stats {
     float mean() const { return n ? float(sum) / n : 0; }
 };
 
+// what the helper thread is asked to do with the semaphores
+enum class Request : uint8_t {
+    NONE,
+    HOLD_THEN_GIVE,     // take sem, give it 300 us later
+    HOLD_UNTIL_TOLD,    // take sem, give it when request becomes NONE
+    SIGNAL_LATER,       // signal bsem 300 us later
+};
+static volatile Request request;
+static volatile bool helper_holding;
+static volatile uint64_t release_us;
+static HAL_Semaphore sem;
+static HAL_BinarySemaphore bsem;
+
+static void busy_wait_us(uint32_t us)
+{
+    const uint64_t until = AP_HAL::micros64() + us;
+    while (AP_HAL::micros64() < until) {
+    }
+}
+
 class SchedulerTiming {
 public:
+    void helper_thread() {
+        while (true) {
+            switch (request) {
+            case Request::NONE:
+                hal.scheduler->delay_microseconds(100);
+                break;
+            case Request::HOLD_THEN_GIVE:
+                sem.take_blocking();
+                helper_holding = true;
+                busy_wait_us(300);
+                release_us = AP_HAL::micros64();
+                helper_holding = false;
+                sem.give();
+                request = Request::NONE;
+                break;
+            case Request::HOLD_UNTIL_TOLD:
+                sem.take_blocking();
+                helper_holding = true;
+                while (request == Request::HOLD_UNTIL_TOLD) {
+                    hal.scheduler->delay_microseconds(100);
+                }
+                helper_holding = false;
+                sem.give();
+                break;
+            case Request::SIGNAL_LATER:
+                busy_wait_us(300);
+                release_us = AP_HAL::micros64();
+                bsem.signal();
+                request = Request::NONE;
+                break;
+            }
+        }
+    }
+
     void timer_tick() {
         const uint64_t now = AP_HAL::micros64();
         if (timer_last_us != 0 && timer_count < TIMER_SAMPLES) {
@@ -80,6 +136,64 @@ static void report_timer_thread()
                         s.mean() > 0 ? 1.0e6f / s.mean() : 0.0f, unsigned(over_1500));
 }
 
+static void report(const char *what, const Stats &s)
+{
+    hal.console->printf("%s: mean %7.1f min %5u max %5u us\n",
+                        what, s.mean(), unsigned(s.min), unsigned(s.max));
+}
+
+static void wait_for_helper_idle()
+{
+    while (request != Request::NONE || helper_holding) {
+        hal.scheduler->delay_microseconds(100);
+    }
+}
+
+static void report_semaphores()
+{
+    static constexpr uint16_t SAMPLES = 200;
+    Stats handoff {}, take_timeout {}, signal_wake {}, wait_timeout {};
+    for (uint16_t i = 0; i < SAMPLES; i++) {
+        // how soon take() returns once the holder gives the semaphore
+        request = Request::HOLD_THEN_GIVE;
+        while (!helper_holding) {
+        }
+        if (sem.take(100)) {
+            handoff.add(uint32_t(AP_HAL::micros64() - release_us));
+            sem.give();
+        }
+        wait_for_helper_idle();
+
+        // how long take(1) waits for a semaphore that is never given
+        request = Request::HOLD_UNTIL_TOLD;
+        while (!helper_holding) {
+        }
+        uint64_t t0 = AP_HAL::micros64();
+        if (!sem.take(1)) {
+            take_timeout.add(uint32_t(AP_HAL::micros64() - t0));
+        }
+        request = Request::NONE;
+        wait_for_helper_idle();
+
+        // how soon wait() returns once the binary semaphore is signalled
+        request = Request::SIGNAL_LATER;
+        if (bsem.wait(100000)) {
+            signal_wake.add(uint32_t(AP_HAL::micros64() - release_us));
+        }
+        wait_for_helper_idle();
+
+        // how long wait(500) waits for a signal that never comes
+        t0 = AP_HAL::micros64();
+        if (!bsem.wait(500)) {
+            wait_timeout.add(uint32_t(AP_HAL::micros64() - t0));
+        }
+    }
+    report("Semaphore::take() wake after give", handoff);
+    report("Semaphore::take(1) timeout       ", take_timeout);
+    report("BinarySemaphore::wait() wake     ", signal_wake);
+    report("BinarySemaphore::wait(500) timeout", wait_timeout);
+}
+
 static void report_delays()
 {
     static const uint16_t requests_us[] = { 50, 100, 250, 500, 1000, 2500 };
@@ -100,6 +214,10 @@ void setup()
     hal.console->printf("SchedulerTiming: measuring the timer thread for %u samples\n",
                         unsigned(TIMER_SAMPLES));
     hal.scheduler->register_timer_process(FUNCTOR_BIND(&timing, &SchedulerTiming::timer_tick, void));
+    if (!hal.scheduler->thread_create(FUNCTOR_BIND(&timing, &SchedulerTiming::helper_thread, void),
+                                      "timing", 8192, AP_HAL::Scheduler::PRIORITY_IO, 0)) {
+        hal.console->printf("SchedulerTiming: failed to create the helper thread\n");
+    }
 }
 
 void loop()
@@ -115,6 +233,7 @@ void loop()
     }
     report_timer_thread();
     report_delays();
+    report_semaphores();
     hal.console->printf("SchedulerTiming: done\n");
     done = true;
 }
