@@ -46,10 +46,8 @@
 #define HAL_BOARD_STORAGE_DIRECTORY HAL_BOARD_STATE_DIRECTORY
 #endif
 
-// no writable filesystem backend yet on QNX, so scripting (which needs
-// one) is off until a filesystem backend is ported
-#ifndef AP_SCRIPTING_ENABLED
-#define AP_SCRIPTING_ENABLED 0
+#ifndef HAL_OS_POSIX_IO
+#define HAL_OS_POSIX_IO 1
 #endif
 
 // only include if compiling C++ code
