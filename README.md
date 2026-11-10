@@ -23,9 +23,10 @@ are listed in
 against the Linux build (table 4). It is built in four stages: port,
 measure, optimize, measure.
 
-1. Each backend is ported from `AP_HAL_Linux` file by file: one commit
-   copies the Linux file, the next adapts it to QNX. The first QNX HAL
-   therefore has Linux's design, and is a like-for-like baseline.
+1. Each backend is ported from `AP_HAL_Linux` file by file, in one
+   commit that builds; `git show -B -C -C <commit>` shows it as a copy
+   of the Linux files plus the QNX changes. The first QNX HAL therefore
+   has Linux's design, and is a like-for-like baseline.
 2. QNX-native optimizations follow as separate commits, each behind a
    build option, so every gain can be measured on its own (2.19 onward).
 
@@ -81,8 +82,8 @@ optimizations, each behind a build option and measured in table 4.
 | 2.4  | Semaphores                           | Done        | Same as `AP_HAL_Linux`: pthread mutex and condition variable. Optimization: 2.23 |
 | 2.5  | Scheduler                            | Done        | Ported from `AP_HAL_Linux`: the timer (1 kHz), UART (100 Hz), RC input (100 Hz) and IO (50 Hz) threads, the same `SCHED_FIFO` priorities, and `thread_create()`. QNX differences: realtime scheduling without root, CPU affinity as a runmask, and stack bounds from thread local storage. Startup now gets to `AP_Baro::init()` and stops at the missing-barometer error, as `AP_HAL_Linux` does on a board with no sensors. Optimization: 2.19 |
 | 2.6  | Filesystem                           | Partial     | Uses ArduPilot's fixed-size `struct dirent`. No writable backend yet, so scripting and file logging are off. To do: enable the POSIX backend, which works on QNX since 1.3 |
-| 2.7  | Storage (parameters)                 | Stub        | To do: port the file-backed `Storage` from `AP_HAL_Linux` |
-| 2.8  | UARTDriver                           | Done        | Ported from `AP_HAL_Linux`, with its console, serial port, UDP and TCP devices. QNX difference: serial ports are set up with standard termios. Tested on the Raspberry Pi 4: console output; MAVLink over TCP, with telemetry and the full parameter list; MAVLink over a serial port, TELEM1 (`/dev/ser3`) at 115200 baud, to QGroundControl through a USB to UART adapter. As on Linux, while startup is stopped at a configuration error, only SERIAL0 is served and reading a single parameter gets no reply. Not tested yet: UDP |
+| 2.7  | Storage (parameters)                 | Done        | Ported from `AP_HAL_Linux`: a 16 kB file, `ArduCopter.stg`, in `/var/lib/ardupilot`. As on Linux, the directory must exist and be writable by the user ArduPilot runs as (see 3.13). QNX differences: the directory is opened with `O_DIRECTORY`, which QNX's `openat()` needs, and no glibc extensions (`strndupa()`, `%m`). Tested on the Raspberry Pi 4: a parameter set over MAVLink survives a restart |
+| 2.8  | UARTDriver                           | Done        | Ported from `AP_HAL_Linux`, with its console, serial port, UDP and TCP devices. QNX difference: serial ports are set up with standard termios. Tested on the Raspberry Pi 4: console output; MAVLink over TCP, with telemetry and the full parameter list; MAVLink over a serial port, TELEM1 (`/dev/ser3`) at 115200 baud, to QGroundControl through a USB to UART adapter. As on Linux, while startup is stopped at a configuration error, only SERIAL0 is served. Not tested yet: UDP |
 | 2.9  | Util                                 | Partial     | Hardware RTC is a stub. To do: port `Util` from `AP_HAL_Linux`, with its directory, defaults and CPU affinity command-line options |
 | 2.10 | I2C                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 I2C driver instead of `i2c-dev` |
 | 2.11 | SPI                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 SPI driver instead of `spidev`. Optimization: 2.21 |
@@ -115,7 +116,7 @@ optimizations, each behind a build option and measured in table 4.
 | 3.10 | Board configuration (buses, devices, pin map)            | Not started | In `libraries/AP_HAL_QNX/hwdef/icepilot/hwdef.dat`, as for Linux boards such as `navio2` |
 | 3.11 | Power monitoring and analog inputs                       | Not started |       |
 | 3.12 | LEDs, buzzer and safety switch (if fitted)               | Not started |       |
-| 3.13 | Start at boot (QNX SLM) as a non-root user               | Not started | With restart on failure (SLM or the High Availability Manager). Measure restart time in table 4 |
+| 3.13 | Start at boot (QNX SLM) as a non-root user               | Not started | With restart on failure (SLM or the High Availability Manager). The image must create `/var/lib/ardupilot`, owned by that user. Measure restart time in table 4 |
 | 3.14 | Bench tests (outputs, failsafes, timing jitter)          | Not started | Required before the first flight |
 | 3.15 | First flight                                             | Not started |       |
 
@@ -205,7 +206,10 @@ scp build/icepilot/bin/arducopter <user>@<target-ip>:
 ssh <user>@<target-ip> ./arducopter --serial0 tcp:0.0.0.0:5760
 ```
 
-`./arducopter --help` lists the serial port options.
+`./arducopter --help` lists the serial port options. Parameters are kept
+in `/var/lib/ardupilot`, which must be writable by that user, for
+example after `sudo mkdir -p /var/lib/ardupilot` and
+`sudo chown <user> /var/lib/ardupilot`.
 
 Otherwise, upload and start the executable through qconn (port 8000)
 with the SDP debugger:
