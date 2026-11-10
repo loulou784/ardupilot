@@ -1,5 +1,7 @@
 #pragma once
 
+#include <hwdef.h>
+
 #define HAL_BOARD_NAME "QNX"
 #define HAL_CPU_CLASS HAL_CPU_CLASS_1000
 #define HAL_MEM_CLASS HAL_MEM_CLASS_1000
@@ -26,8 +28,10 @@
 #define HAL_WITH_EKF_DOUBLE HAL_HAVE_HARDWARE_DOUBLE
 #endif
 
-#ifndef HAL_BOARD_STATE_DIRECTORY
+#ifndef AP_STATEDIR
 #define HAL_BOARD_STATE_DIRECTORY "/var/lib/ardupilot"
+#else
+#define HAL_BOARD_STATE_DIRECTORY AP_STATEDIR
 #endif
 
 #ifndef HAL_BOARD_LOG_DIRECTORY
