@@ -22,6 +22,8 @@
   - how soon a thread waiting on a semaphore wakes when another thread
     gives or signals it, and how long semaphore timeouts really last
 */
+#include <string.h>
+
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
 
@@ -121,6 +123,26 @@ public:
 
 static SchedulerTiming timing;
 
+// percentile of the samples, in us, from a 1 us histogram up to 4 ms
+static uint32_t percentile(const uint32_t *samples, uint32_t n, float pct)
+{
+    static constexpr uint32_t BINS = 4000;
+    static uint16_t histogram[BINS];
+    memset(histogram, 0, sizeof(histogram));
+    for (uint32_t i = 0; i < n; i++) {
+        histogram[samples[i] < BINS ? samples[i] : BINS - 1]++;
+    }
+    const uint32_t wanted = uint32_t(n * pct / 100.0f);
+    uint32_t seen = 0;
+    for (uint32_t bin = 0; bin < BINS; bin++) {
+        seen += histogram[bin];
+        if (seen > wanted) {
+            return bin;
+        }
+    }
+    return BINS - 1;
+}
+
 static void report_timer_thread()
 {
     Stats s {};
@@ -134,6 +156,12 @@ static void report_timer_thread()
     hal.console->printf("timer thread period (%u samples): mean %.1f min %u max %u us, %.1f Hz; %u over 1500 us\n",
                         unsigned(s.n), s.mean(), unsigned(s.min), unsigned(s.max),
                         s.mean() > 0 ? 1.0e6f / s.mean() : 0.0f, unsigned(over_1500));
+    hal.console->printf("timer thread period percentiles: 0.1%% %u, 1%% %u, 50%% %u, 99%% %u, 99.9%% %u us\n",
+                        unsigned(percentile(timer_period_us, timer_count, 0.1f)),
+                        unsigned(percentile(timer_period_us, timer_count, 1.0f)),
+                        unsigned(percentile(timer_period_us, timer_count, 50.0f)),
+                        unsigned(percentile(timer_period_us, timer_count, 99.0f)),
+                        unsigned(percentile(timer_period_us, timer_count, 99.9f)));
 }
 
 static void report(const char *what, const Stats &s)
