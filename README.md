@@ -8,7 +8,7 @@ For general ArduPilot documentation, see the
 [upstream README](https://github.com/ArduPilot/ardupilot/blob/master/README.md)
 and [ardupilot.org](https://ardupilot.org).
 
-**Last updated:** 2026-11-08. Update the tables in a `README.md:` commit
+**Last updated:** 2026-11-09. Update the tables in a `README.md:` commit
 at the end of each step.
 
 ## Approach
@@ -62,7 +62,7 @@ exists. Target: the QNX 8.0 AArch64 QEMU VM.
 | 1.3  | POSIX filesystem `dirent` adapter                             | Done        | Every QNX target uses ArduPilot's fixed-size `struct dirent`. The POSIX backend copies each entry from QNX's and takes its type from `fstatat()`, as the FATFS backend does. Disk space uses `statvfs()`. Directory listing verified at runtime over MAVLink FTP (1.8) |
 | 1.4  | `AP_HAL_SITL` compiles                                        | Done        | Serial speed through standard `termios`, `CRTSCTS` defined as `IHFLOW \| OHFLOW`, and `O_SYNC` without `O_DIRECT`, as on OpenBSD. `sparse-endian.h` uses QNX's byte order functions |
 | 1.5  | `SITL` physics library and other libraries compile            | Done        | The physics library compiles unchanged. lwIP (used by AP_Networking) uses QNX's `struct iovec`, set in `lwipopts.h` next to the existing macOS settings |
-| 1.6  | `arducopter` links                                            | Done        | QNX AArch64 executable, about 6.4 MB with debug information, linked with `libsocket`. The malloc wrapper is in and waf's symbol check passes. The whole build has no warnings |
+| 1.6  | `arducopter` links                                            | Done        | QNX AArch64 executable, about 6.4 MB with debug information, linked with `libsocket`. The malloc wrapper is in and waf's symbol check passes. One warning, in seven Lua files: Lua's `SIZE_C` replaces the `SIZE_C()` macro from QNX's `stdint.h`. Harmless, as Lua uses only its own; to be fixed in `AP_Scripting` |
 | 1.7  | Runs on the QNX VM                                            | Done        | Starts and runs the Copter main loop on the QNX 8.0 AArch64 QEMU VM: EKF3 aligned, GPS fix, `ArduPilot Ready`. Simulated time runs at about 0.3x real time, as the VM is emulated (no KVM for AArch64 on an x86 host) |
 | 1.8  | MAVLink over TCP from the host                                | Done        | pymavlink on the host, connected to `<target-ip>:5760`: heartbeat, 30 telemetry message types, parameter reads, and MAVLink FTP listings of real QNX files and `@SYS` |
 | 1.9  | AUTO mission flown                                            | Done        | Flown as ArduPilot's autotest does (`AUTO_OPTIONS` 3, arm in AUTO): takeoff to 20 m, a 50 m square, RTL. Every waypoint reached in order, landed and disarmed 0.0 m from home, no failsafe or EKF messages. A 6.5 MB flight log was written to `logs/` on QNX |
@@ -75,7 +75,7 @@ optimizations, each behind a build option and measured in table 4.
 
 | #    | Component                            | Status      | Notes |
 |------|--------------------------------------|-------------|-------|
-| 2.1  | QNX boards                           | Partial     | Python classes `qnx` and `icepilot` for now, using `ntoaarch64` GCC 12.2. To do, as for `LinuxBoard`: a `QNXBoard` class with boards in `libraries/AP_HAL_QNX/hwdef/`, the malloc wrapper that zeroes allocations, and `-pthread` |
+| 2.1  | QNX boards                           | Done        | `QNXBoard`, like `LinuxBoard`: each directory in `libraries/AP_HAL_QNX/hwdef/` (`qnx`, `icepilot`) is a board, and `qnx_hwdef.py` turns its `hwdef.dat` into `hwdef.h`. Same build settings as Linux: `-O3`, `-pthread`, the malloc wrapper that zeroes allocations, and `--apstatedir`. Toolchain `ntoaarch64`, GCC 12.2 |
 | 2.2  | HAL class (`HAL_QNX_Class`)          | Done        | Matches the current `AP_HAL::HAL` constructor |
 | 2.3  | System time and panic (`system.cpp`) | Partial     | Same as `AP_HAL_Linux`, using `CLOCK_MONOTONIC`. To do: the stopped-clock support, with the Scheduler (2.5) |
 | 2.4  | Semaphores                           | Done        | Same as `AP_HAL_Linux`: pthread mutex and condition variable. Optimization: 2.23 |
@@ -103,7 +103,7 @@ optimizations, each behind a build option and measured in table 4.
 
 | #    | Item                                                     | Status      | Notes |
 |------|----------------------------------------------------------|-------------|-------|
-| 3.1  | waf `icepilot` board and `HAL_BOARD_SUBTYPE_QNX_ICEPILOT` | Done        | Subclass of the `qnx` board |
+| 3.1  | waf `icepilot` board and `HAL_BOARD_SUBTYPE_QNX_ICEPILOT` | Done        | `libraries/AP_HAL_QNX/hwdef/icepilot/hwdef.dat`, which sets the subtype |
 | 3.2  | `arducopter` builds                                      | Done        | QNX AArch64 executable, about 3.4 MB with debug information |
 | 3.3  | Runs on the QNX AArch64 QEMU VM                          | Partial     | The process starts, then stops at the Scheduler blocker (2.5) |
 | 3.4  | QNX image for the Raspberry Pi 4                         | Not started |       |
@@ -163,6 +163,7 @@ from 2.19 onward.
 | SPI and I2C              | `spidev`, `i2c-dev`              | QNX SPI and I2C drivers                     | Different driver interfaces |
 | GPIO and PWM             | sysfs, `/dev/mem`                | QNX GPIO driver, `mmap_device_memory()`     | No sysfs on QNX |
 | CAN                      | SocketCAN                        | SITL: multicast CAN, as on macOS. HAL: off for now | No SocketCAN on QNX |
+| Optional libraries       | LTTng tracing, `libiio`          | Not checked for                             | Both are Linux-only |
 
 ## Building
 
