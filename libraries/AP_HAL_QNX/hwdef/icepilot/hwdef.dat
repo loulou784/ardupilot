@@ -1,0 +1,7 @@
+# hwdef for IcePilot: a Raspberry Pi 4 running QNX SDP 8, with the
+# IcePilot HAT (iCE40UP5K FPGA for PWM, RC input and I/O)
+
+env TOOLCHAIN ntoaarch64
+
+# FIXME: use of this define should go away, as on Linux boards:
+define CONFIG_HAL_BOARD_SUBTYPE HAL_BOARD_SUBTYPE_QNX_ICEPILOT

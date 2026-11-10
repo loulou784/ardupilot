@@ -1,0 +1,4 @@
+# hwdef for the generic QNX configuration, eg. a Raspberry Pi 4 running
+# QNX SDP 8 with no autopilot hardware attached
+
+env TOOLCHAIN ntoaarch64
