@@ -1,10 +1,94 @@
 #pragma once
 
+#include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
-#include "AP_HAL_QNX_Namespace.h"
 
-class QNX::Util : public AP_HAL::Util {
+#include "Heat.h"
+#include "Semaphores.h"
+
+/*
+  Ported from AP_HAL_Linux, without the parts that only Linux drivers use:
+  the sysfs buzzer (ToneAlarm), and get_hw_arm32(), which finds the board
+  in /proc/cpuinfo, a file QNX does not have.
+ */
+
+namespace QNX {
+
+class Util : public AP_HAL::Util {
 public:
-    uint64_t get_hw_rtc() const override { return 0; }
-    void set_hw_rtc(uint64_t time_utc_usec) override {}
+    static Util *from(AP_HAL::Util *util) {
+        return static_cast<Util*>(util);
+    }
+
+    void init(int argc, char *const *argv);
+
+    /**
+       return commandline arguments, if available
+     */
+    void commandline_arguments(uint8_t &argc, char * const *&argv) override;
+
+    /*
+      get/set system clock in UTC microseconds
+     */
+    void set_hw_rtc(uint64_t time_utc_usec) override;
+    uint64_t get_hw_rtc() const override;
+
+    const char *get_custom_log_directory() const override final { return custom_log_directory; }
+    const char *get_custom_terrain_directory() const override final { return custom_terrain_directory; }
+    const char *get_custom_storage_directory() const override final { return custom_storage_directory; }
+
+    void set_custom_log_directory(const char *_custom_log_directory) { custom_log_directory = _custom_log_directory; }
+    void set_custom_terrain_directory(const char *_custom_terrain_directory) { custom_terrain_directory = _custom_terrain_directory; }
+    void set_custom_storage_directory(const char *_custom_storage_directory) {
+        custom_storage_directory = _custom_storage_directory;
+    }
+    void set_custom_defaults_path(const char *_custom_defaults) {
+        custom_defaults = _custom_defaults;
+    }
+
+    // get path to custom defaults file for AP_Param
+    const char* get_custom_defaults_file() const override final {
+        return custom_defaults;
+    }
+
+    /* Parse cpu set in the form 0; 0,2; or 0-2, into a QNX runmask, as
+       QNX has no cpu_set_t: bit n selects CPU n, for CPUs 0 to 31 */
+    bool parse_cpu_set(const char *s, uint32_t *cpu_set) const;
+
+    bool is_chardev_node(const char *path);
+    void set_imu_temp(float current) override;
+    void set_imu_target_temp(int8_t *target) override;
+
+    uint32_t available_memory(void) override;
+
+    bool get_system_id(char buf[50]) override;
+    bool get_system_id_unformatted(uint8_t buf[], uint8_t &len) override;
+
+    /*
+     * Write a string as specified by @fmt to the file in @path. Note this
+     * should not be used on hot path since it will open, write and close the
+     * file for each call.
+     */
+    int write_file(const char *path, const char *fmt, ...) FMT_PRINTF(3, 4);
+
+    /*
+     * Read a string as specified by @fmt from the file in @path. Note this
+     * should not be used on hot path since it will open, read and close the
+     * file for each call.
+     */
+    int read_file(const char *path, const char *fmt, ...) FMT_SCANF(3, 4);
+
+    // fills data with random values of requested size
+    bool get_random_vals(uint8_t* data, size_t size) override;
+
+private:
+    int saved_argc;
+    Heat *_heat;
+    char *const *saved_argv;
+    const char *custom_log_directory = nullptr;
+    const char *custom_terrain_directory = nullptr;
+    const char *custom_storage_directory = nullptr;
+    const char *custom_defaults = HAL_PARAM_DEFAULTS_PATH;
 };
+
+}
