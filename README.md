@@ -77,12 +77,12 @@ optimizations, each behind a build option and measured in table 4.
 |------|--------------------------------------|-------------|-------|
 | 2.1  | QNX boards                           | Done        | `QNXBoard`, like `LinuxBoard`: each directory in `libraries/AP_HAL_QNX/hwdef/` (`qnx`, `icepilot`) is a board, and `qnx_hwdef.py` turns its `hwdef.dat` into `hwdef.h`. Same build settings as Linux: `-O3`, `-pthread`, the malloc wrapper that zeroes allocations, and `--apstatedir`. Toolchain `ntoaarch64`, GCC 12.2 |
 | 2.2  | HAL class (`HAL_QNX_Class`)          | Done        | Matches the current `AP_HAL::HAL` constructor |
-| 2.3  | System time and panic (`system.cpp`) | Partial     | Same as `AP_HAL_Linux`, using `CLOCK_MONOTONIC`. To do: the stopped-clock support, with the Scheduler (2.5) |
+| 2.3  | System time and panic (`system.cpp`) | Done        | Same as `AP_HAL_Linux`: `CLOCK_MONOTONIC`, and the stopped clock that Replay uses |
 | 2.4  | Semaphores                           | Done        | Same as `AP_HAL_Linux`: pthread mutex and condition variable. Optimization: 2.23 |
-| 2.5  | Scheduler                            | Stub        | **Current blocker:** no `thread_create`, so startup stops at `Failed to start Logger IO thread`. To do: port `Scheduler` and `Thread` from `AP_HAL_Linux`. Optimization: 2.19 |
+| 2.5  | Scheduler                            | Done        | Ported from `AP_HAL_Linux`: the timer (1 kHz), UART (100 Hz), RC input (100 Hz) and IO (50 Hz) threads, the same `SCHED_FIFO` priorities, and `thread_create()`. QNX differences: realtime scheduling without root, CPU affinity as a runmask, and stack bounds from thread local storage. Startup now gets to `AP_Baro::init()` and stops at the missing-barometer error, as `AP_HAL_Linux` does on a board with no sensors. Optimization: 2.19 |
 | 2.6  | Filesystem                           | Partial     | Uses ArduPilot's fixed-size `struct dirent`. No writable backend yet, so scripting and file logging are off. To do: enable the POSIX backend, which works on QNX since 1.3 |
 | 2.7  | Storage (parameters)                 | Stub        | To do: port the file-backed `Storage` from `AP_HAL_Linux` |
-| 2.8  | UARTDriver                           | Stub        | To do: port `UARTDriver` and its serial, UDP and TCP devices from `AP_HAL_Linux` |
+| 2.8  | UARTDriver                           | Stub        | **Next:** the console is a stub, so startup messages, such as the barometer error, are not shown. To do: port `UARTDriver` and its serial, UDP and TCP devices from `AP_HAL_Linux` |
 | 2.9  | Util                                 | Partial     | Hardware RTC is a stub. To do: port `Util` from `AP_HAL_Linux` |
 | 2.10 | I2C                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 I2C driver instead of `i2c-dev` |
 | 2.11 | SPI                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 SPI driver instead of `spidev`. Optimization: 2.21 |
@@ -93,7 +93,7 @@ optimizations, each behind a build option and measured in table 4.
 | 2.16 | DSP (gyro FFT)                       | Stub        | Returns no results |
 | 2.17 | CAN                                  | Not planned | Disabled for QNX |
 | 2.18 | WSPI, Flash, OpticalFlow             | Not planned | Not used on this platform |
-| 2.19 | Optimization: scheduler timers       | Not started | High-resolution timers that wake threads with pulses, and a tuned `ClockPeriod`, instead of sleeping. Measure: main-loop jitter |
+| 2.19 | Optimization: scheduler timers       | Not started | High-resolution timers that wake threads with pulses, and a tuned `ClockPeriod`, instead of sleeping. Why: the QNX tick is 1 ms and `nanosleep()` rounds up to whole ticks. On the Raspberry Pi 4, any request under 1 ms sleeps 1.0 ms, and 1000 µs sleeps 2.0 ms, within a few µs. So the ported threads run on tick boundaries, and the main loop cannot wait for less than 1 ms. `clock_nanosleep()` with `TIMER_PRECISE` made no difference. Measure: timer thread rate, main-loop jitter |
 | 2.20 | Optimization: event loop             | Not started | Pulses and `ionotify` instead of the ported `poll()` loop. Measure: wake-up latency |
 | 2.21 | Optimization: IMU SPI path           | Not started | Direct SPI controller access with interrupts handled in ArduPilot, instead of going through the SPI driver. Measure: transfer time and IMU sample regularity |
 | 2.22 | Optimization: CPU partitioning       | Not started | Adaptive partitioning, guaranteeing the flight code a CPU budget even when the system is overloaded. Measure: loop timing with a background CPU hog |
@@ -105,7 +105,7 @@ optimizations, each behind a build option and measured in table 4.
 |------|----------------------------------------------------------|-------------|-------|
 | 3.1  | waf `icepilot` board and `HAL_BOARD_SUBTYPE_QNX_ICEPILOT` | Done        | `libraries/AP_HAL_QNX/hwdef/icepilot/hwdef.dat`, which sets the subtype |
 | 3.2  | `arducopter` builds                                      | Done        | QNX AArch64 executable, about 3.4 MB with debug information |
-| 3.3  | Runs on the QNX AArch64 QEMU VM                          | Partial     | The process starts, then stops at the Scheduler blocker (2.5) |
+| 3.3  | Runs on the QNX AArch64 QEMU VM                          | Partial     | Starts its threads, then stops at the missing-barometer error (sensors: 3.9). The same on a Raspberry Pi 4 with the QNX 8.0 quick start image, run as an ordinary user, with the Linux `SCHED_FIFO` priorities: main 12, timer 15, UART 14, RC input 13, IO 10 |
 | 3.4  | QNX image for the Raspberry Pi 4                         | Not started |       |
 | 3.5  | FPGA register and protocol specification                 | Not started | Needed before 3.6 to 3.8 |
 | 3.6  | FPGA bitstream loading                                   | Not started |       |
@@ -163,6 +163,9 @@ from 2.19 onward.
 | SPI and I2C              | `spidev`, `i2c-dev`              | QNX SPI and I2C drivers                     | Different driver interfaces |
 | GPIO and PWM             | sysfs, `/dev/mem`                | QNX GPIO driver, `mmap_device_memory()`     | No sysfs on QNX |
 | CAN                      | SocketCAN                        | SITL: multicast CAN, as on macOS. HAL: off for now | No SocketCAN on QNX |
+| Realtime scheduling      | Only when run as root            | For every user                              | QNX gives `SCHED_FIFO` to every user, up to priority 63 by default; ArduPilot uses up to 20 |
+| CPU affinity             | `sched_setaffinity()`, `cpu_set_t` | Runmask, set with `ThreadCtl()`           | QNX has neither |
+| Thread stack bounds      | `pthread_getattr_np()`           | Thread local storage (`__tls()`)            | QNX has no `pthread_getattr_np()`. Used only for stack-usage debugging |
 | Optional libraries       | LTTng tracing, `libiio`          | Not checked for                             | Both are Linux-only |
 
 ## Building
