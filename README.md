@@ -76,14 +76,14 @@ optimizations, each behind a build option and measured in table 4.
 | #    | Component                            | Status      | Notes |
 |------|--------------------------------------|-------------|-------|
 | 2.1  | QNX boards                           | Done        | `QNXBoard`, like `LinuxBoard`: each directory in `libraries/AP_HAL_QNX/hwdef/` (`qnx`, `icepilot`) is a board, and `qnx_hwdef.py` turns its `hwdef.dat` into `hwdef.h`. Same build settings as Linux: `-O3`, `-pthread`, the malloc wrapper that zeroes allocations, and `--apstatedir`. Toolchain `ntoaarch64`, GCC 12.2 |
-| 2.2  | HAL class (`HAL_QNX_Class`)          | Done        | Matches the current `AP_HAL::HAL` constructor |
+| 2.2  | HAL class (`HAL_QNX_Class`)          | Done        | `run()` as in `AP_HAL_Linux`: the same driver start order, with the scheduler threads released before `setup()`; 10 serial ports; the `--serial0` to `--serial9` options; and a clean exit on SIGINT and SIGTERM, not tested yet, as it is set up after `setup()`. The directory, defaults and CPU affinity options come with Util (2.9) |
 | 2.3  | System time and panic (`system.cpp`) | Done        | Same as `AP_HAL_Linux`: `CLOCK_MONOTONIC`, and the stopped clock that Replay uses |
 | 2.4  | Semaphores                           | Done        | Same as `AP_HAL_Linux`: pthread mutex and condition variable. Optimization: 2.23 |
 | 2.5  | Scheduler                            | Done        | Ported from `AP_HAL_Linux`: the timer (1 kHz), UART (100 Hz), RC input (100 Hz) and IO (50 Hz) threads, the same `SCHED_FIFO` priorities, and `thread_create()`. QNX differences: realtime scheduling without root, CPU affinity as a runmask, and stack bounds from thread local storage. Startup now gets to `AP_Baro::init()` and stops at the missing-barometer error, as `AP_HAL_Linux` does on a board with no sensors. Optimization: 2.19 |
 | 2.6  | Filesystem                           | Partial     | Uses ArduPilot's fixed-size `struct dirent`. No writable backend yet, so scripting and file logging are off. To do: enable the POSIX backend, which works on QNX since 1.3 |
 | 2.7  | Storage (parameters)                 | Stub        | To do: port the file-backed `Storage` from `AP_HAL_Linux` |
-| 2.8  | UARTDriver                           | Stub        | **Next:** the console is a stub, so startup messages, such as the barometer error, are not shown. To do: port `UARTDriver` and its serial, UDP and TCP devices from `AP_HAL_Linux` |
-| 2.9  | Util                                 | Partial     | Hardware RTC is a stub. To do: port `Util` from `AP_HAL_Linux` |
+| 2.8  | UARTDriver                           | Done        | Ported from `AP_HAL_Linux`, with its console, serial port, UDP and TCP devices. QNX difference: serial ports are set up with standard termios. Tested on the Raspberry Pi 4: console output; MAVLink over TCP, with telemetry and the full parameter list; MAVLink over a serial port, TELEM1 (`/dev/ser3`) at 115200 baud, to QGroundControl through a USB to UART adapter. As on Linux, while startup is stopped at a configuration error, only SERIAL0 is served and reading a single parameter gets no reply. Not tested yet: UDP |
+| 2.9  | Util                                 | Partial     | Hardware RTC is a stub. To do: port `Util` from `AP_HAL_Linux`, with its directory, defaults and CPU affinity command-line options |
 | 2.10 | I2C                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 I2C driver instead of `i2c-dev` |
 | 2.11 | SPI                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 SPI driver instead of `spidev`. Optimization: 2.21 |
 | 2.12 | GPIO                                 | Stub        | To do: on the QNX GPIO driver, or `mmap_device_memory()`, instead of sysfs and `/dev/mem` |
@@ -105,7 +105,7 @@ optimizations, each behind a build option and measured in table 4.
 |------|----------------------------------------------------------|-------------|-------|
 | 3.1  | waf `icepilot` board and `HAL_BOARD_SUBTYPE_QNX_ICEPILOT` | Done        | `libraries/AP_HAL_QNX/hwdef/icepilot/hwdef.dat`, which sets the subtype |
 | 3.2  | `arducopter` builds                                      | Done        | QNX AArch64 executable, about 3.4 MB with debug information |
-| 3.3  | Runs on the QNX AArch64 QEMU VM                          | Partial     | Starts its threads, then stops at the missing-barometer error (sensors: 3.9). The same on a Raspberry Pi 4 with the QNX 8.0 quick start image, run as an ordinary user, with the Linux `SCHED_FIFO` priorities: main 12, timer 15, UART 14, RC input 13, IO 10 |
+| 3.3  | Runs on the QNX AArch64 QEMU VM                          | Partial     | Starts its threads, then stops at the missing-barometer error (sensors: 3.9). The same on a Raspberry Pi 4 with the QNX 8.0 quick start image, run as an ordinary user, with the Linux `SCHED_FIFO` priorities: main 12, timer 15, UART 14, RC input 13, IO 10. Since 2.8 the error is shown on the console and sent over MAVLink |
 | 3.4  | QNX image for the Raspberry Pi 4                         | Not started |       |
 | 3.5  | FPGA register and protocol specification                 | Not started | Needed before 3.6 to 3.8 |
 | 3.6  | FPGA bitstream loading                                   | Not started |       |
@@ -154,7 +154,7 @@ from 2.19 onward.
 | SITL linking             | Static                           | Dynamic                                     | The QNX SDP has no static `libsocket` |
 | Directory entries        | System `struct dirent`           | ArduPilot's fixed-size `struct dirent`, filled from QNX's | QNX's `struct dirent` has a variable-length name and no `d_type` |
 | Disk space               | `statfs()`                       | `statvfs()`                                 | QNX has no `statfs()` |
-| Serial port speed (SITL) | `termios2` ioctls                | Standard `termios`, as on macOS and the BSDs | Linux encodes baud rates as codes; QNX uses the numbers themselves |
+| Serial port setup        | `termios2` ioctls                | Standard `termios`, as on macOS and the BSDs | QNX has no `termios2`. Linux encodes standard baud rates as codes; QNX uses the numbers themselves, so standard `termios` sets any rate |
 | Hardware flow control    | `CRTSCTS`                        | `IHFLOW \| OHFLOW`                          | QNX has separate input and output flags |
 | Unbuffered serial writes (SITL) | `O_DIRECT \| O_SYNC`      | `O_SYNC`, as on OpenBSD                     | QNX has no `O_DIRECT` |
 | Byte order functions     | ArduPilot's own                  | QNX's, from `net/netbyte.h`                 | QNX declares them as functions, which clash with ArduPilot's |
@@ -195,8 +195,20 @@ The executable is written to `build/SITL_aarch64_qnx/bin/arducopter`.
 
 ## Running on a QNX target
 
-Upload and start the executable through qconn (port 8000) with the SDP
-debugger:
+On a target with SSH, such as the QNX quick start image for the
+Raspberry Pi 4, copy the executable and run it as an ordinary user: QNX
+gives it realtime priorities without root. For example, with MAVLink on
+TCP port 5760:
+
+```bash
+scp build/icepilot/bin/arducopter <user>@<target-ip>:
+ssh <user>@<target-ip> ./arducopter --serial0 tcp:0.0.0.0:5760
+```
+
+`./arducopter --help` lists the serial port options.
+
+Otherwise, upload and start the executable through qconn (port 8000)
+with the SDP debugger:
 
 ```bash
 source <path-to-sdp>/qnxsdp-env.sh
