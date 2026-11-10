@@ -15,6 +15,12 @@
 #define AP_QNX_SENSORS_SCHED_POLICY  SCHED_FIFO
 #define AP_QNX_SENSORS_SCHED_PRIO 12
 
+// QNX optimization: sleep with high-resolution timers rather than on the
+// clock tick; set to 0 to sleep as on Linux, eg. for a baseline benchmark
+#ifndef AP_HAL_QNX_HIGH_RES_TIMER_ENABLED
+#define AP_HAL_QNX_HIGH_RES_TIMER_ENABLED 1
+#endif
+
 namespace QNX {
 
 class Scheduler : public AP_HAL::Scheduler {
