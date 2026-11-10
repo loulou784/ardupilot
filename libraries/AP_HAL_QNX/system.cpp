@@ -8,6 +8,7 @@
 
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/system.h>
+#include <AP_HAL_QNX/Scheduler.h>
 #include <AP_Math/div1000.h>
 
 extern const AP_HAL::HAL& hal;
@@ -39,6 +40,9 @@ void WEAK panic(const char *errormsg, ...)
     va_end(ap);
     UNUSED_RESULT(write(1, "\n", 1));
 
+    if (hal.rcin != nullptr) {
+        hal.rcin->teardown();
+    }
     if (hal.scheduler != nullptr) {
         hal.scheduler->delay_microseconds(10000);
     }
@@ -57,6 +61,12 @@ uint32_t millis()
 
 uint64_t micros64()
 {
+    const QNX::Scheduler* scheduler = QNX::Scheduler::from(hal.scheduler);
+    uint64_t stopped_usec = scheduler->stopped_clock_usec();
+    if (stopped_usec) {
+        return stopped_usec;
+    }
+
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return uint64_div1000(ts_to_nsec(ts) - state.start_time_ns);
