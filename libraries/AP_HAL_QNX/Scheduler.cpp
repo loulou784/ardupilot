@@ -110,6 +110,18 @@ void Scheduler::init_cpu_affinity()
     }
 
     if (ThreadCtl(_NTO_TCTL_RUNMASK_GET_AND_SET_INHERIT, rmsk) == -1) {
+        /*
+          Unlike Linux, QNX 8 runs threads on scheduling clusters, and
+          only accepts a runmask that matches one.  Unless the boot image
+          defines more, the clusters are each single CPU and all CPUs, so
+          eg. "-c 2-3" fails with EINVAL.
+         */
+        if (errno == EINVAL) {
+            AP_HAL::panic("Failed to set affinity for main process: CPU set 0x%x "
+                          "is not a QNX scheduling cluster; use one CPU or all CPUs, "
+                          "or define the cluster in the boot image",
+                          (unsigned)_cpu_affinity);
+        }
         // %m is a glibc extension, so spell it out
         AP_HAL::panic("Failed to set affinity for main process: %s",
                       strerror(errno));
