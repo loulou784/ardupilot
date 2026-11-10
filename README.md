@@ -94,7 +94,7 @@ optimizations, each behind a build option and measured in table 4.
 | 2.16 | DSP (gyro FFT)                       | Stub        | Returns no results |
 | 2.17 | CAN                                  | Not planned | Disabled for QNX |
 | 2.18 | WSPI, Flash, OpticalFlow             | Not planned | Not used on this platform |
-| 2.19 | Optimization: scheduler timers       | Not started | High-resolution timers that wake threads with pulses, and a tuned `ClockPeriod`, instead of sleeping. Why: the QNX tick is 1 ms and `nanosleep()` rounds up to whole ticks. On the Raspberry Pi 4, any request under 1 ms sleeps 1.0 ms, and 1000 µs sleeps 2.0 ms, within a few µs. So the ported threads run on tick boundaries, and the main loop cannot wait for less than 1 ms. `clock_nanosleep()` with `TIMER_PRECISE` made no difference. Measure: timer thread rate, main-loop jitter |
+| 2.19 | Optimization: scheduler timers       | Done        | Sleeps use QNX 8 high-resolution timers: one per thread, with a 1 µs tolerance, sending a pulse. QNX's `nanosleep()` ends on the 1 ms tick, and QNX 8 cannot change the tick at run time (`ClockPeriod()` reports `ENOTSUP`, even for root). Measured on the Raspberry Pi 4 with `examples/SchedulerTiming`: `delay_microseconds()` of 50, 250, 1000 and 2500 µs takes 55, 255, 1005 and 2506 µs, where it took 1000, 1000, 2000 and 3000 µs; the timer thread keeps 1000 Hz either way. Needs the `high_resolution_timer` ability: root has it, another user gets it with `on -A nonroot,allow,high_resolution_timer -u <user>`. Without it, sleeps fall back to the tick, with a warning. `AP_HAL_QNX_HIGH_RES_TIMER_ENABLED 0` builds the baseline |
 | 2.20 | Optimization: event loop             | Not started | Pulses and `ionotify` instead of the ported `poll()` loop. Measure: wake-up latency |
 | 2.21 | Optimization: IMU SPI path           | Not started | Direct SPI controller access with interrupts handled in ArduPilot, instead of going through the SPI driver. Measure: transfer time and IMU sample regularity |
 | 2.22 | Optimization: CPU partitioning       | Not started | Adaptive partitioning, guaranteeing the flight code a CPU budget even when the system is overloaded. Measure: loop timing with a background CPU hog |
@@ -116,7 +116,7 @@ optimizations, each behind a build option and measured in table 4.
 | 3.10 | Board configuration (buses, devices, pin map)            | Not started | In `libraries/AP_HAL_QNX/hwdef/icepilot/hwdef.dat`, as for Linux boards such as `navio2` |
 | 3.11 | Power monitoring and analog inputs                       | Not started |       |
 | 3.12 | LEDs, buzzer and safety switch (if fitted)               | Not started |       |
-| 3.13 | Start at boot (QNX SLM) as a non-root user               | Not started | With restart on failure (SLM or the High Availability Manager). The image must create `/var/lib/ardupilot`, owned by that user. Measure restart time in table 4 |
+| 3.13 | Start at boot (QNX SLM) as a non-root user               | Not started | With restart on failure (SLM or the High Availability Manager). The image must create `/var/lib/ardupilot`, owned by that user, and start ArduPilot with the `high_resolution_timer` ability (2.19). For CPU affinity to a set of CPUs other than one or all, startup must define it as a cluster, eg. `-c pair:0xc`. Measure restart time in table 4 |
 | 3.14 | Bench tests (outputs, failsafes, timing jitter)          | Not started | Required before the first flight |
 | 3.15 | First flight                                             | Not started |       |
 
@@ -132,12 +132,12 @@ parameters, enabled features and compiler family.
 | 4.1  | IcePilot Linux build                  | Not started | A Linux hwdef, `libraries/AP_HAL_Linux/hwdef/icepilot/`, with the FPGA driver written against `AP_HAL::SPIDevice` so both builds run the same driver |
 | 4.2  | Linux test images                     | Not started | Raspberry Pi OS with its stock kernel and with a PREEMPT_RT kernel. **To decide:** one or both (both recommended) |
 | 4.3  | Like-for-like builds                  | Not started | Same ArduPilot commit and parameters, the same features enabled (on QNX this needs 2.6), GCC 12 and `-O3` on both |
-| 4.4  | Benchmark harness                     | Not started | A script that collects the `PM` log messages and `@SYS/tasks.txt`, `timers.txt` and `threads.txt` over MAVLink FTP, repeats each run and produces one comparison table |
+| 4.4  | Benchmark harness                     | Partial     | `examples/SchedulerTiming` measures the timer thread and `delay_microseconds()` on any HAL (2.19). To do: a script that collects the `PM` log messages and `@SYS/tasks.txt`, `timers.txt` and `threads.txt` over MAVLink FTP, repeats each run and produces one comparison table |
 | 4.5  | CPU microbenchmarks                   | Not started | ArduPilot's `AP_Math` benchmarks (Google Benchmark), run on both systems |
 | 4.6  | External timing                       | Not started | Main-loop jitter (minimum, average, 99th percentile, maximum) and IMU-to-motor latency. **To decide:** a logic analyzer, or timestamps from the IcePilot FPGA (part of 3.5) |
 | 4.7  | Workloads                             | Not started | Idle, full logging, high-rate telemetry, scripting, a background CPU hog, and a network flood |
 | 4.8  | Baseline results                      | Not started | Linux stock kernel, Linux PREEMPT_RT, and QNX as ported (2.1 to 2.16), before any optimization |
-| 4.9  | Optimization results                  | Not started | Each QNX optimization (2.19 to 2.23) measured on its own against the QNX baseline and against Linux |
+| 4.9  | Optimization results                  | Partial     | Each QNX optimization (2.19 to 2.23) measured on its own against the QNX baseline and against Linux. 2.19 against the QNX baseline: see 2.19; against Linux: to do (4.2) |
 | 4.10 | Recovery and startup                  | Not started | Boot-to-ready time, and restart time after ArduPilot is killed (3.13) |
 
 ## Differences from the Linux port
@@ -167,6 +167,7 @@ from 2.19 onward.
 | Realtime scheduling      | Only when run as root            | For every user                              | QNX gives `SCHED_FIFO` to every user, up to priority 63 by default; ArduPilot uses up to 20 |
 | CPU affinity             | `sched_setaffinity()`, `cpu_set_t`, any set of CPUs | Runmask, set with `ThreadCtl()`; one CPU or all CPUs | QNX has neither call nor type. QNX 8 also only accepts a runmask that matches a scheduling cluster, and by default these are each single CPU and all CPUs |
 | Thread stack bounds      | `pthread_getattr_np()`           | Thread local storage (`__tls()`)            | QNX has no `pthread_getattr_np()`. Used only for stack-usage debugging |
+| Short sleeps             | `nanosleep()`, which Linux's high-resolution timers end on time | A QNX high-resolution timer per thread, waited for as a pulse | QNX's `nanosleep()` ends on the 1 ms clock tick. The QNX timers need the `high_resolution_timer` ability |
 | Optional libraries       | LTTng tracing, `libiio`          | Not checked for                             | Both are Linux-only |
 
 ## Building
@@ -204,6 +205,14 @@ TCP port 5760:
 ```bash
 scp build/icepilot/bin/arducopter <user>@<target-ip>:
 ssh <user>@<target-ip> ./arducopter --serial0 tcp:0.0.0.0:5760
+```
+
+For sleeps shorter than the 1 ms clock tick, ArduPilot needs the
+`high_resolution_timer` ability (see 2.19). Root has it; start it as
+root and give another user only that ability with:
+
+```bash
+ssh <user>@<target-ip> sudo on -A nonroot,allow,high_resolution_timer -u <user> ./arducopter --serial0 tcp:0.0.0.0:5760
 ```
 
 `./arducopter --help` lists the serial port options. Parameters are kept
