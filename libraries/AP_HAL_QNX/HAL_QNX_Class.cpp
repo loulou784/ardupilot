@@ -7,6 +7,7 @@
 #include <stdlib.h>
 
 #include <AP_HAL/utility/getopt_cpp.h>
+#include <AP_Module/AP_Module.h>
 
 #include "HAL_QNX_Class.h"
 #include "AP_HAL_QNX_Private.h"
@@ -110,10 +111,31 @@ void _usage(void)
     printf("\tnetworking UDP:\n");
     printf("\t                  --serial0 udp:11.0.0.255:14550:bcast\n");
     printf("\t                  --serial0 udpin:0.0.0.0:14550\n");
+    printf("\tcustom log path:\n");
+    printf("\t                  --log-directory /var/APM/logs\n");
+    printf("\t                  -l /var/APM/logs\n");
+    printf("\tcustom terrain path:\n");
+    printf("\t                   --terrain-directory /var/APM/terrain\n");
+    printf("\t                   -t /var/APM/terrain\n");
+    printf("\tcustom storage path:\n");
+    printf("\t                   --storage-directory /var/APM/storage\n");
+    printf("\t                   -s /var/APM/storage\n");
+#if AP_MODULE_SUPPORTED
+    printf("\tmodule support:\n");
+    printf("\t                   --module-directory %s\n", AP_MODULE_DEFAULT_DIRECTORY);
+    printf("\t                   -M %s\n", AP_MODULE_DEFAULT_DIRECTORY);
+#endif
+    printf("\tcpu affinity:\n");
+    printf("\t                   --cpu-affinity 1 (single cpu) or 1,3 (multiple cpus) or 1-3 (range of cpus)\n");
+    printf("\t                   -c 1 (single cpu) or 1,3 (multiple cpus) or 1-3 (range of cpus)\n");
 }
 
 void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
 {
+#if AP_MODULE_SUPPORTED
+    const char *module_path = AP_MODULE_DEFAULT_DIRECTORY;
+#endif
+
     enum long_options {
         CMDLINE_SERIAL0 = 1, // must be in 0-9 order and numbered consecutively
         CMDLINE_SERIAL1,
@@ -127,11 +149,6 @@ void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
         CMDLINE_SERIAL9,
     };
 
-    /*
-      the options of AP_HAL_Linux that set serial ports.  Its directory,
-      defaults and CPU affinity options set values in Util, and come with
-      the Util port.
-     */
     int opt;
     const struct GetOptLong::option options[] = {
         {"uartA",         true,  0, 'A'},
@@ -154,11 +171,17 @@ void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
         {"serial7",       true,  0, CMDLINE_SERIAL7},
         {"serial8",       true,  0, CMDLINE_SERIAL8},
         {"serial9",       true,  0, CMDLINE_SERIAL9},
+        {"log-directory",       true,  0, 'l'},
+        {"terrain-directory",   true,  0, 't'},
+        {"storage-directory",   true,  0, 's'},
+        {"module-directory",    true,  0, 'M'},
+        {"defaults",            true,  0, 'd'},
+        {"cpu-affinity",        true,  0, 'c'},
         {"help",                false,  0, 'h'},
         {0, false, 0, 0}
     };
 
-    GetOptLong gopt(argc, argv, "A:B:C:D:E:F:G:H:I:J:h",
+    GetOptLong gopt(argc, argv, "A:B:C:D:E:F:G:H:I:J:l:t:s:he:SM:c:",
                     options);
 
     /*
@@ -198,6 +221,32 @@ void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
         case CMDLINE_SERIAL9:
             serialDrivers[opt - CMDLINE_SERIAL0]->set_device_path(gopt.optarg);
             break;
+        case 'l':
+            utilInstance.set_custom_log_directory(gopt.optarg);
+            break;
+        case 't':
+            utilInstance.set_custom_terrain_directory(gopt.optarg);
+            break;
+        case 's':
+            utilInstance.set_custom_storage_directory(gopt.optarg);
+            break;
+#if AP_MODULE_SUPPORTED
+        case 'M':
+            module_path = gopt.optarg;
+            break;
+#endif
+        case 'd':
+            utilInstance.set_custom_defaults_path(gopt.optarg);
+            break;
+        case 'c': {
+            uint32_t cpu_affinity;
+            if (!utilInstance.parse_cpu_set(gopt.optarg, &cpu_affinity)) {
+                fprintf(stderr, "Could not parse cpu affinity: %s\n", gopt.optarg);
+                exit(1);
+            }
+            QNX::Scheduler::from(scheduler)->set_cpu_affinity(cpu_affinity);
+            break;
+        }
         case 'h':
             _usage();
             exit(0);
@@ -219,6 +268,7 @@ void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
     rcin->init();
     serial(0)->begin(115200);
     analogin->init();
+    utilInstance.init(argc+gopt.optind-1, &argv[gopt.optind-1]);
 
     // As on Linux, release the scheduler threads before setup(), so
     // that they serve the drivers (UARTs, storage, IO processes) while
@@ -226,7 +276,20 @@ void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
     // Correct deadlock, and infinite loop in setup()").
     scheduler->set_system_initialized();
 
+    // possibly load external modules
+#if AP_MODULE_SUPPORTED
+    if (module_path != nullptr) {
+        AP_Module::init(module_path);
+    }
+#endif
+
+#if AP_MODULE_SUPPORTED
+    AP_Module::call_hook_setup_start();
+#endif
     callbacks->setup();
+#if AP_MODULE_SUPPORTED
+    AP_Module::call_hook_setup_complete();
+#endif
 
     setup_signal_handlers();
 
