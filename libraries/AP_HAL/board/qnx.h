@@ -50,6 +50,20 @@
 #define HAL_OS_POSIX_IO 1
 #endif
 
+// if bus masks are not setup in the hwdef then use these defaults, as
+// on Linux: buses that do not exist are skipped
+#ifndef HAL_QNX_I2C_BUS_MASK
+#define HAL_QNX_I2C_BUS_MASK 0xFFFF
+#endif
+
+#ifndef HAL_QNX_I2C_INTERNAL_BUS_MASK
+#define HAL_QNX_I2C_INTERNAL_BUS_MASK 0xFFFF
+#endif
+
+#ifndef HAL_QNX_I2C_EXTERNAL_BUS_MASK
+#define HAL_QNX_I2C_EXTERNAL_BUS_MASK 0xFFFF
+#endif
+
 // only include if compiling C++ code
 #ifdef __cplusplus
 #include <AP_HAL_QNX/Semaphores.h>
