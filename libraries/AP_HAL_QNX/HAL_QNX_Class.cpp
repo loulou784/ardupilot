@@ -318,6 +318,7 @@ void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
     // At least try to stop all PWM before shutting down
     rcout->force_safety_on();
     rcin->teardown();
+    I2CDeviceManager::from(i2c_mgr)->teardown();
     Scheduler::from(scheduler)->teardown();
 }
 
