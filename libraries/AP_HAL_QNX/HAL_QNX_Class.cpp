@@ -7,6 +7,10 @@
 #include <stdlib.h>
 
 #include <AP_HAL/utility/getopt_cpp.h>
+#if AP_SIM_ENABLED
+#include <AP_HAL/SIMState.h>
+#include <SITL/SITL.h>
+#endif
 #include <AP_Module/AP_Module.h>
 
 #include "HAL_QNX_Class.h"
@@ -54,6 +58,9 @@ static Flash flashDriver;
 #if HAL_WITH_DSP
 static DSP dspDriver;
 #endif
+#if AP_SIM_ENABLED
+static AP_HAL::SIMState xsimstate;
+#endif
 
 HAL_QNX::HAL_QNX() :
     AP_HAL::HAL(
@@ -80,6 +87,9 @@ HAL_QNX::HAL_QNX() :
         &utilInstance,
         &opticalFlowDriver,
         &flashDriver,
+#if AP_SIM_ENABLED
+        &xsimstate,
+#endif
 #if HAL_WITH_DSP
         &dspDriver,
 #endif
@@ -261,6 +271,14 @@ void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
     // can still stop the process proprely, although without proper
     // teardown.
     // This isn't perfect, but still prevents an unkillable process.
+
+#if AP_SIM_ENABLED
+    // the simulated sensors need the simulator before setup() runs, as
+    // in AP_HAL_ChibiOS
+    AP::sitl()->init();
+    // take RC input over UDP on SITL's port
+    AP::sitl()->rcin_port = 5501;
+#endif
 
     scheduler->init();
     gpio->init();
