@@ -319,6 +319,7 @@ void HAL_QNX::run(int argc, char* const argv[], Callbacks* callbacks) const
     rcout->force_safety_on();
     rcin->teardown();
     I2CDeviceManager::from(i2c_mgr)->teardown();
+    SPIDeviceManager::from(spi)->teardown();
     Scheduler::from(scheduler)->teardown();
 }
 
