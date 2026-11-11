@@ -5,3 +5,29 @@ env TOOLCHAIN ntoaarch64
 
 # FIXME: use of this define should go away, as on Linux boards:
 define CONFIG_HAL_BOARD_SUBTYPE HAL_BOARD_SUBTYPE_QNX_ICEPILOT
+
+# I2C buses, as the IcePilot boot image starts them, at 400 kHz:
+# I2C1 (GPIO2/3) on the HAT, with the barometer; I2C6 (GPIO22/23) to the
+# external connector, eg. for a GPS compass
+define HAL_QNX_I2C_BUS_MASK ((1U << 1) | (1U << 6))
+define HAL_QNX_I2C_INTERNAL_BUS_MASK (1U << 1)
+define HAL_QNX_I2C_EXTERNAL_BUS_MASK (1U << 6)
+
+# SPI devices, on the io-spi nodes of the boot image's spi-icepilot.conf:
+#          name       bus subdev node                     mode       bits cs_pin        lowspeed highspeed
+QNX_SPIDEV "icm42688" 0   0      "/dev/io-spi/spi0/imu1"  SPI_MODE_3 8    SPI_CS_KERNEL 1*MHZ    10*MHZ
+QNX_SPIDEV "imu2"     0   1      "/dev/io-spi/spi0/imu2"  SPI_MODE_3 8    SPI_CS_KERNEL 1*MHZ    10*MHZ
+
+# IMU1: ICM-42688-P on SPI0 CE0.  IMU2, on SPI0 CE1, is probed as an
+# InvenSense v3 device too, which covers the ICM-42xxx and ICM-45xxx
+# families; a different chip there is simply not found.  Rotations are
+# to be set once the HAT layout is fixed (3.10)
+IMU Invensensev3 SPI:icm42688 ROTATION_NONE
+IMU Invensensev3 SPI:imu2 ROTATION_NONE
+
+# barometer: BMP390 on I2C1, at either of its addresses
+BARO BMP388 I2C:1:0x76
+BARO BMP388 I2C:1:0x77
+
+# external compasses, eg. on a GPS, on the external bus
+define AP_COMPASS_PROBING_ENABLED 1
