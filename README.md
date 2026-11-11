@@ -85,10 +85,10 @@ optimizations, each behind a build option and measured in table 4.
 | 2.7  | Storage (parameters)                 | Done        | Ported from `AP_HAL_Linux`: a 16 kB file, `ArduCopter.stg`, in `/var/lib/ardupilot`. As on Linux, the directory must exist and be writable by the user ArduPilot runs as (see 3.13). QNX differences: the directory is opened with `O_DIRECTORY`, which QNX's `openat()` needs, and no glibc extensions (`strndupa()`, `%m`). Tested on the Raspberry Pi 4: a parameter set over MAVLink survives a restart |
 | 2.8  | UARTDriver                           | Done        | Ported from `AP_HAL_Linux`, with its console, serial port, UDP and TCP devices. QNX difference: serial ports are set up with standard termios. Tested on the Raspberry Pi 4: console output; MAVLink over TCP, with telemetry and the full parameter list; MAVLink over a serial port, TELEM1 (`/dev/ser3`) at 115200 baud, to QGroundControl through a USB to UART adapter. As on Linux, while startup is stopped at a configuration error, only SERIAL0 is served. Not tested yet: UDP |
 | 2.9  | Util                                 | Done        | Ported from `AP_HAL_Linux`: the system clock as the hardware RTC, custom directories and defaults file, system ID, random values, file helpers. Left out, as only Linux drivers use them: the sysfs buzzer, the PWM IMU heater and the board detection from `/proc/cpuinfo`. Tested on the Raspberry Pi 4: `-s`, `--defaults` and `-c` work; with `BRD_RTC_TYPES` allowing it, `SYSTEM_TIME` matches the Pi's clock. As on Linux, `--defaults` has no short `-d` form |
-| 2.10 | I2C                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 I2C driver instead of `i2c-dev` |
-| 2.11 | SPI                                  | Stub        | To do: the `AP_HAL_Linux` device manager, on the QNX Raspberry Pi 4 SPI driver instead of `spidev`. Optimization: 2.21 |
-| 2.12 | GPIO                                 | Stub        | To do: on the QNX GPIO driver, or `mmap_device_memory()`, instead of sysfs and `/dev/mem` |
-| 2.13 | RCInput                              | Stub        | IcePilot reads RC input through the FPGA, see 3.8 |
+| 2.10 | I2C                                  | Partial     | Ported from `AP_HAL_Linux`, on the QNX I2C drivers (`/dev/i2c<n>`) instead of `i2c-dev`: one `devctl()` per transfer, from and to the caller's buffers. Device callbacks run on one thread per bus (`DeviceBus`, see the differences below). As on ChibiOS, a bus runs at the speed of its slowest device. Tested on the Raspberry Pi 4 with `examples/BusTest`, with nothing on the buses: a probe of an absent address takes 65 µs, and two callbacks on bus 1, every 1000 and 2500 µs, each with a transfer, run within 1 µs of their period 98% of the time. Needs the fixed `i2c-bcm2711` (3.4). To do: test with devices |
+| 2.11 | SPI                                  | Partial     | Ported from `AP_HAL_Linux`, on io-spi instead of `spidev`: the board's `QNX_SPIDEV` lines give each device's io-spi node, and an exchange is one `devctl()`, from and to the caller's buffers. A write then a read is one exchange, with the chip select held throughout. Works around the shared bus clock of `spi-bcm2711`, measured: a device used after one at another rate ran at the other's rate. Tested on the Raspberry Pi 4 with `examples/BusTest`, with nothing on the bus: a 2-byte exchange at 10 MHz takes 26 µs; callbacks every 1000 µs on two devices run within 1 µs of their period 98% of the time. Needs the fixed `spi-bcm2711` (3.4). To do: test with devices. Optimization: 2.21 |
+| 2.12 | GPIO                                 | Partial     | `GPIO_RPI`, as on Linux, through the `rpi_gpio` resource manager of the QNX Raspberry Pi images: about 5 µs per operation. Unlike Linux, pin interrupts work: `rpi_gpio` sends a pulse on each edge. A board lists the pins ArduPilot may use (`HAL_QNX_GPIO_PIN_MASK`), so that a parameter cannot take over a bus pin. Tested on the Raspberry Pi 4 with `examples/GPIOTest` on GPIO26: writes and toggles behave; 200 edges with interrupts on both edges, none missed, all with the right level, 11.5 µs after the write on average; none after detaching. To do: test with devices |
+| 2.13 | RCInput                              | Partial     | Through `AP_RCProtocol`, as on ChibiOS: a receiver on a serial port set to RCIN (`SERIALn_PROTOCOL 23`), eg. CRSF or ELRS, SBUS through an inverter, DSM, SRXL. With no receiver there are no channels, so the RC failsafe works. Tested on the Raspberry Pi 4 without a receiver, and with simulation on hardware (2.24). To do: test with a receiver. IcePilot's RC input pin, through the FPGA: 3.8 |
 | 2.14 | RCOutput                             | Stub        | IcePilot drives outputs through the FPGA, see 3.7 |
 | 2.15 | AnalogIn                             | Stub        |       |
 | 2.16 | DSP (gyro FFT)                       | Stub        | Returns no results |
@@ -108,13 +108,13 @@ optimizations, each behind a build option and measured in table 4.
 | 3.1  | waf `icepilot` board and `HAL_BOARD_SUBTYPE_QNX_ICEPILOT` | Done        | `libraries/AP_HAL_QNX/hwdef/icepilot/hwdef.dat`, which sets the subtype |
 | 3.2  | `arducopter` builds                                      | Done        | QNX AArch64 executable, about 4.2 MB with debug information and scripting |
 | 3.3  | Runs on the QNX AArch64 QEMU VM                          | Partial     | Starts its threads, then stops at the missing-barometer error (sensors: 3.9). The same on a Raspberry Pi 4 with the QNX 8.0 quick start image, run as an ordinary user, with the Linux `SCHED_FIFO` priorities: main 12, timer 15, UART 14, RC input 13, IO 10. Since 2.8 the error is shown on the console and sent over MAVLink |
-| 3.4  | QNX image for the Raspberry Pi 4                         | Not started |       |
+| 3.4  | QNX image for the Raspberry Pi 4                         | Partial     | The IcePilot boot image is built, outside this repository, from the QNX 8.0 quick start image, with the IcePilot pin layout. It also replaces the board's SPI and I2C drivers with fixed builds from the BSP sources: both started a transfer, then waited for the interrupt thread's signal without checking whether it had come already, so a signal sent first was lost. With the stock `spi-bcm2711`, nearly every exchange of up to 64 bytes failed with `ETIMEDOUT` after 1 ms; the I2C driver had the same race, which shows under load. The SPI driver also kept the bus clock of the last device configured, and its timeout grew with the square of the length. To do: install the rebuilt image; until then, the fixed drivers are started by hand |
 | 3.5  | FPGA register and protocol specification                 | Not started | Needed before 3.6 to 3.8 |
 | 3.6  | FPGA bitstream loading                                   | Not started |       |
 | 3.7  | Servo and motor outputs through the FPGA                 | Not started |       |
 | 3.8  | RC input through the FPGA                                | Not started |       |
-| 3.9  | Sensors (IMU, barometer, compass)                        | Not started | Sensor list to be defined, then declared in the board hwdef (3.10) |
-| 3.10 | Board configuration (buses, devices, pin map)            | Not started | In `libraries/AP_HAL_QNX/hwdef/icepilot/hwdef.dat`, as for Linux boards such as `navio2` |
+| 3.9  | Sensors (IMU, barometer, compass)                        | Partial     | Declared in the hwdef, from the IcePilot pin layout: ICM-42688-P on SPI0 CE0, a second InvenSense v3 IMU on SPI0 CE1, the BMP390 barometer on I2C1, compasses probed on I2C6. To do: test with the sensors, and set their rotations |
+| 3.10 | Board configuration (buses, devices, pin map)            | Partial     | In `libraries/AP_HAL_QNX/hwdef/icepilot/hwdef.dat`, as for Linux boards such as `navio2`: I2C buses (I2C1 internal, I2C6 external), SPI devices on the io-spi nodes of the boot image, and the six pins ArduPilot may use as GPIO. To do: sensor rotations, FPGA, CAN and the FPGA flash |
 | 3.11 | Power monitoring and analog inputs                       | Not started |       |
 | 3.12 | LEDs, buzzer and safety switch (if fitted)               | Not started |       |
 | 3.13 | Start at boot (QNX SLM) as a non-root user               | Not started | With restart on failure (SLM or the High Availability Manager). The image must create `/var/lib/ardupilot`, owned by that user, and start ArduPilot with the `high_resolution_timer` ability (2.19). For CPU affinity to a set of CPUs other than one or all, startup must define it as a cluster, eg. `-c pair:0xc`. Measure restart time in table 4 |
@@ -162,8 +162,15 @@ from 2.19 onward.
 | Byte order functions     | ArduPilot's own                  | QNX's, from `net/netbyte.h`                 | QNX declares them as functions, which clash with ArduPilot's |
 | lwIP `struct iovec`      | lwIP's own                       | QNX's                                       | QNX defines it in every file, through `sys/platform.h`; Linux only in `sys/uio.h`, which lwIP does not include |
 | Event loop (`Poller`)    | `epoll`, `eventfd`, `timerfd`    | `poll()` or QNX pulses                      | Not available on QNX |
-| SPI and I2C              | `spidev`, `i2c-dev`              | QNX SPI and I2C drivers                     | Different driver interfaces |
-| GPIO and PWM             | sysfs, `/dev/mem`                | QNX GPIO driver, `mmap_device_memory()`     | No sysfs on QNX |
+| Device callbacks         | A `timerfd` per callback, waited for with `epoll` (`PollerThread`) | One thread per bus that keeps each callback's next run time and sleeps until the earliest on one high-resolution timer (`DeviceBus`), as ChibiOS does | No `timerfd` or `epoll` on QNX. Each callback runs once per pass, so a slow one cannot starve the others |
+| I2C                      | `i2c-dev`, one `I2C_RDWR` ioctl for several reads | `devctl()` to the QNX I2C driver, one per transfer; buses named `/dev/i2c<n>` | QNX I2C drivers take one write and read per message |
+| I2C bus clock            | Set by the device tree           | The slowest device's, as on ChibiOS         | The QNX driver sets the clock for the whole bus |
+| SPI                      | `spidev`, a write then a read as two messages of one ioctl | io-spi nodes named in the hwdef (`QNX_SPIDEV`); one exchange of both lengths | io-spi exchanges send and receive the same number of bytes, and QNX names nodes in the io-spi configuration |
+| Missing SPI node         | Panics                           | The device is not created, so its driver reports it missing | A missing node is a board configuration problem that the driver can report |
+| Buses                    | Closed with their last device    | Stay open once used                         | Devices that fail to probe come and go, while the bus thread may run callbacks |
+| GPIO                     | `/dev/gpiomem` on the Raspberry Pi; no pin interrupts | Messages to `rpi_gpio`; pin interrupts from its pulses; outputs read as last written; only the board's GPIO pins | No `/dev/gpiomem` on QNX, and mapping the registers needs root. `rpi_gpio` cannot read outputs |
+| PWM                      | sysfs, `/dev/mem`                | Through the IcePilot FPGA (3.7)             | No sysfs on QNX |
+| RC input                 | `RCInput_RCProtocol` and board backends | `AP_RCProtocol`, as on ChibiOS          | Receivers on serial ports, without a board backend |
 | CAN                      | SocketCAN                        | SITL: multicast CAN, as on macOS. HAL: off for now | No SocketCAN on QNX |
 | Realtime scheduling      | Only when run as root            | For every user                              | QNX gives `SCHED_FIFO` to every user, up to priority 63 by default; ArduPilot uses up to 20 |
 | CPU affinity             | `sched_setaffinity()`, `cpu_set_t`, any set of CPUs | Runmask, set with `ThreadCtl()`; one CPU or all CPUs | QNX has neither call nor type. QNX 8 also only accepts a runmask that matches a scheduling cluster, and by default these are each single CPU and all CPUs |
@@ -233,6 +240,26 @@ ssh <user>@<target-ip> sudo on -A nonroot,allow,high_resolution_timer -u <user> 
 in `/var/lib/ardupilot`, which must be writable by that user, for
 example after `sudo mkdir -p /var/lib/ardupilot` and
 `sudo chown <user> /var/lib/ardupilot`.
+
+### Testing the buses and GPIO
+
+Two examples check a board's buses and GPIO through the `AP_HAL`
+interfaces, so they run on every HAL. Build them with
+`./waf examples`, then run them on the target as above, with the
+`high_resolution_timer` ability:
+
+- `build/icepilot/examples/BusTest` scans each I2C bus with one-byte
+  reads, as `i2cdetect -r` does; reads register 0 and the usual
+  `WHO_AM_I` registers of each SPI device of the board; and times
+  periodic callbacks on the bus threads.
+- `build/icepilot/examples/GPIOTest` drives GPIO26, which must be free,
+  and checks writes, reads and pin interrupts on its own edges. For
+  another pin, configure with eg. `--define GPIO_TEST_PIN=6`.
+
+Both need the fixed SPI and I2C drivers of the IcePilot boot image
+(3.4).
+
+### Starting through qconn
 
 Otherwise, upload and start the executable through qconn (port 8000)
 with the SDP debugger:
