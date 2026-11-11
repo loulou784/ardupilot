@@ -1,7 +1,10 @@
+#include <AP_HAL/AP_HAL.h>
 
 #include "GPIO.h"
 
 using namespace QNX;
+
+extern const AP_HAL::HAL& hal;
 
 GPIO::GPIO()
 {}
@@ -37,16 +40,21 @@ DigitalSource::DigitalSource(uint8_t v) :
 {}
 
 void DigitalSource::mode(uint8_t output)
-{}
-
-uint8_t DigitalSource::read() {
-    return _v;
+{
+    hal.gpio->pinMode(_v, output);
 }
 
-void DigitalSource::write(uint8_t value) {
-    _v = value;
+uint8_t DigitalSource::read()
+{
+    return hal.gpio->read(_v);
 }
 
-void DigitalSource::toggle() {
-    _v = !_v;
+void DigitalSource::write(uint8_t value)
+{
+    hal.gpio->write(_v, value);
+}
+
+void DigitalSource::toggle()
+{
+    hal.gpio->toggle(_v);
 }

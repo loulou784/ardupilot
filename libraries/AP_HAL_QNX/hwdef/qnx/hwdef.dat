@@ -2,3 +2,6 @@
 # QNX SDP 8 with no autopilot hardware attached
 
 env TOOLCHAIN ntoaarch64
+
+# GPIO through rpi_gpio, which the QNX Raspberry Pi images start
+define HAL_QNX_GPIO_RPI_ENABLED 1

@@ -6,6 +6,13 @@ env TOOLCHAIN ntoaarch64
 # FIXME: use of this define should go away, as on Linux boards:
 define CONFIG_HAL_BOARD_SUBTYPE HAL_BOARD_SUBTYPE_QNX_ICEPILOT
 
+# GPIO through rpi_gpio.  ArduPilot may use only the pins that are GPIO
+# in the IcePilot layout: GPIO6 (FPGA CRESET_B), GPIO16 (flash CS),
+# GPIO17 (FPGA CDONE), GPIO24 (CAN INT), GPIO25 (FPGA IRQ) and GPIO26
+# (spare); the others carry the buses and serial ports
+define HAL_QNX_GPIO_RPI_ENABLED 1
+define HAL_QNX_GPIO_PIN_MASK ((1U << 6) | (1U << 16) | (1U << 17) | (1U << 24) | (1U << 25) | (1U << 26))
+
 # I2C buses, as the IcePilot boot image starts them, at 400 kHz:
 # I2C1 (GPIO2/3) on the HAT, with the barometer; I2C6 (GPIO22/23) to the
 # external connector, eg. for a GPS compass

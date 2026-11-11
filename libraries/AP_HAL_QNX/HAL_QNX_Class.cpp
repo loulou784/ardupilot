@@ -48,7 +48,11 @@ static SPIDeviceManager spiDeviceManager;
 static WSPIDeviceManager wspiDeviceManager;
 static AnalogIn analogIn;
 static Storage storageDriver;
+#if HAL_QNX_GPIO_RPI_ENABLED
+static GPIO_RPI gpioDriver;
+#else
 static GPIO gpioDriver;
+#endif
 static RCInput rcinDriver;
 static RCOutput rcoutDriver;
 static Scheduler schedulerInstance;
