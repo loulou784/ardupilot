@@ -1803,9 +1803,22 @@ class QNXBoard(Board):
 
         env.DEFINES.update(
             CONFIG_HAL_BOARD = 'HAL_BOARD_QNX',
-            AP_SIM_ENABLED = 0,
             HAL_FORCE_32BIT = 0,
         )
+
+        # simulation on hardware: the vehicle runs on AP_HAL_QNX with
+        # simulated sensors and physics, as for ChibiOS boards
+        if cfg.env.SIM_ENABLED:
+            env.DEFINES.update(
+                AP_SIM_ENABLED = 1,
+            )
+            env.AP_LIBRARIES += [
+                'SITL',
+            ]
+        else:
+            env.DEFINES.update(
+                AP_SIM_ENABLED = 0,
+            )
 
         if not cfg.env.DEBUG:
             env.CXXFLAGS += [
