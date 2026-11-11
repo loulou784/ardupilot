@@ -15,9 +15,10 @@ public:
     uint8_t num_channels() override;
     uint16_t read(uint8_t ch) override;
     uint8_t read(uint16_t* periods, uint8_t len) override;
-    virtual const char *protocol() const override { return "QNX"; }
+    const char *protocol() const override;
 
     // called by the scheduler's rcin thread, as on Linux; empty until
-    // there is an RC input backend
+    // there is an RC input pin (3.8): AP_RCProtocol reads serial
+    // receivers from the main thread
     virtual void _timer_tick() {}
 };

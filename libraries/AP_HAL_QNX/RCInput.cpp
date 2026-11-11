@@ -1,22 +1,25 @@
-
 #include "RCInput.h"
 
 #include <AP_HAL/AP_HAL.h>
-#if AP_SIM_ENABLED
 #include <AP_Math/AP_Math.h>
 #include <AP_RCProtocol/AP_RCProtocol.h>
-#endif
 
 using namespace QNX;
+
 RCInput::RCInput()
 {}
 
-#if AP_SIM_ENABLED
 /*
-  With simulation on hardware, RC input comes from AP_RCProtocol, as in
-  AP_HAL_SITL: its UDP backend simulates a receiver with the sticks
-  centred and the throttle low, and also takes RC input over UDP, as SITL
-  does.
+  RC input comes from AP_RCProtocol, as on ChibiOS: a receiver on a
+  serial port set to RCIN (SERIALn_PROTOCOL 23), eg. CRSF, SBUS through an
+  inverter, DSM or SRXL.  IcePilot's RC input pin, through the FPGA, is to
+  come (3.8).  With simulation on hardware, AP_RCProtocol's UDP backend
+  simulates a receiver with the sticks centred and the throttle low, as
+  in AP_HAL_SITL.
+
+  With no receiver, there are no channels, so the vehicle sees no RC and
+  its RC failsafe works; the previous stub reported centred sticks and a
+  low throttle, as if a receiver were there.
  */
 void RCInput::init()
 {
@@ -44,30 +47,7 @@ uint8_t RCInput::read(uint16_t* periods, uint8_t len)
     return MIN(len, num_channels());
 }
 
-#else
-
-void RCInput::init()
-{}
-
-bool RCInput::new_input() {
-    return false;
+const char *RCInput::protocol() const
+{
+    return AP::RC().detected_protocol_name();
 }
-
-uint8_t RCInput::num_channels() {
-    return 0;
-}
-
-uint16_t RCInput::read(uint8_t chan) {
-    if (chan == 2) return 900; /* throttle should be low, for safety */
-    else return 1500;
-}
-
-uint8_t RCInput::read(uint16_t* periods, uint8_t len) {
-    for (uint8_t i = 0; i < len; i++){
-        if (i == 2) periods[i] = 900;
-        else periods[i] = 1500;
-    }
-    return len;
-}
-
-#endif  // AP_SIM_ENABLED
