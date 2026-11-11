@@ -237,7 +237,10 @@ bool warned_no_high_res_timer;
 
 bool SleepTimer::open()
 {
-    _chid = ChannelCreate(_NTO_CHF_PRIVATE);
+    // a thread that receives a pulse takes the pulse's priority, unless
+    // its channel has a fixed priority: without it, the first sleep
+    // dropped every scheduler thread to the timer pulse's priority, 10
+    _chid = ChannelCreate(_NTO_CHF_PRIVATE | _NTO_CHF_FIXED_PRIORITY);
     if (_chid == -1) {
         return false;
     }
