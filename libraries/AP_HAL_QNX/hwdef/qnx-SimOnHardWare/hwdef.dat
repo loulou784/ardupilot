@@ -1,0 +1,11 @@
+# hwdef for simulation on hardware: the vehicle runs on AP_HAL_QNX, on a
+# Raspberry Pi 4 running QNX SDP 8, with simulated sensors and physics,
+# as the ChibiOS *-SimOnHardWare boards do
+
+include ../qnx/hwdef.dat
+
+env SIM_ENABLED 1
+
+# the parameters of the ChibiOS SimOnHardWare boards, for a simulated quad
+ROMFS defaults.parm libraries/AP_HAL_QNX/hwdef/qnx-SimOnHardWare/defaults.parm
+define HAL_PARAM_DEFAULTS_PATH "@ROMFS/defaults.parm"
