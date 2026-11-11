@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/neutrino.h>
-#include <sys/siginfo.h>
 #include <sys/syspage.h>
 #include <sys/time.h>
 #include <time.h>
@@ -17,6 +16,7 @@
 #include <AP_Math/AP_Math.h>
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
+#include "PulseTimer.h"
 #include "RCInput.h"
 #include "Storage.h"
 #include "UARTDriver.h"
@@ -194,102 +194,34 @@ void Scheduler::_debug_stack()
 /*
   QNX optimization: high-resolution sleeps.
 
-  nanosleep() on QNX ends on a clock tick, 1 ms by default, and QNX 8
-  cannot change the tick at run time (ClockPeriod() reports ENOTSUP), so
-  a 250 us sleep takes 1 ms and a 2.5 ms one 3 ms.  A QNX 8 timer with a
-  tolerance below the tick is a high-resolution timer: the kernel
-  programs it on its own, and it fires within a few microseconds of the
-  requested time.  Each thread that sleeps gets such a timer, which sends
-  a pulse to a channel of its own that the thread waits on.
-
-  Setting a tolerance below the tick needs the high_resolution_timer
-  ability, which root has.  Give it to another user with, eg.
-      on -A nonroot,allow,high_resolution_timer -u <user> arducopter ...
-  Without it, sleeps fall back to nanosleep() and the clock tick.
+  nanosleep() on QNX ends on a clock tick, 1 ms by default, so a 250 us
+  sleep takes 1 ms and a 2.5 ms one 3 ms.  Each thread that sleeps gets a
+  high-resolution timer instead (see PulseTimer.h); without the
+  high_resolution_timer ability, sleeps fall back to nanosleep().
  */
 namespace {
 
-// how late a high-resolution sleep may end
-constexpr long HIGH_RES_TIMER_TOLERANCE_NS = 1000;
-
 class SleepTimer {
 public:
-    ~SleepTimer() { close(); }
-
     // sleep for usec microseconds; false if this thread cannot use a
     // high-resolution timer, and must sleep some other way
     bool sleep(uint32_t usec);
 
 private:
-    bool open();
-    void close();
-
     enum class State : uint8_t { UNTRIED, OPEN, FAILED };
     State _state = State::UNTRIED;
-    int _chid = -1;
-    int _coid = -1;
-    bool _have_timer = false;
-    timer_t _timer {};
+    PulseTimer _timer;
 };
 
 thread_local SleepTimer sleep_timer;
-bool warned_no_high_res_timer;
-
-bool SleepTimer::open()
-{
-    // a thread that receives a pulse takes the pulse's priority, unless
-    // its channel has a fixed priority: without it, the first sleep
-    // dropped every scheduler thread to the timer pulse's priority, 10
-    _chid = ChannelCreate(_NTO_CHF_PRIVATE | _NTO_CHF_FIXED_PRIORITY);
-    if (_chid == -1) {
-        return false;
-    }
-    _coid = ConnectAttach(0, 0, _chid, _NTO_SIDE_CHANNEL, 0);
-    if (_coid == -1) {
-        return false;
-    }
-    struct sigevent ev;
-    SIGEV_PULSE_INIT(&ev, _coid, SIGEV_PULSE_PRIO_INHERIT, _PULSE_CODE_MINAVAIL, 0);
-    if (timer_create(CLOCK_MONOTONIC, &ev, &_timer) == -1) {
-        return false;
-    }
-    _have_timer = true;
-
-    struct itimerspec tolerance {};
-    tolerance.it_value.tv_nsec = HIGH_RES_TIMER_TOLERANCE_NS;
-    if (timer_settime(_timer, TIMER_TOLERANCE, &tolerance, nullptr) == -1) {
-        if (!__atomic_exchange_n(&warned_no_high_res_timer, true, __ATOMIC_RELAXED)) {
-            ::fprintf(stderr, "Scheduler: no high-resolution timers (%s), so sleeps end on the "
-                      "clock tick; they need the high_resolution_timer ability\n",
-                      strerror(errno));
-        }
-        return false;
-    }
-    return true;
-}
-
-void SleepTimer::close()
-{
-    if (_have_timer) {
-        timer_delete(_timer);
-        _have_timer = false;
-    }
-    if (_coid != -1) {
-        ConnectDetach(_coid);
-        _coid = -1;
-    }
-    if (_chid != -1) {
-        ChannelDestroy(_chid);
-        _chid = -1;
-    }
-}
 
 bool SleepTimer::sleep(uint32_t usec)
 {
     if (_state == State::UNTRIED) {
-        _state = open() ? State::OPEN : State::FAILED;
+        // on the clock tick, a timer is no better than nanosleep()
+        _state = _timer.open() && _timer.high_resolution() ? State::OPEN : State::FAILED;
         if (_state == State::FAILED) {
-            close();
+            _timer.close();
         }
     }
     if (_state != State::OPEN) {
@@ -299,21 +231,17 @@ bool SleepTimer::sleep(uint32_t usec)
         return true;
     }
 
-    struct itimerspec expiry {};
-    expiry.it_value.tv_sec = usec / 1000000UL;
-    expiry.it_value.tv_nsec = (usec % 1000000UL) * 1000UL;
-    if (timer_settime(_timer, 0, &expiry, nullptr) == -1) {
+    if (!_timer.arm_after_ns(usec * 1000ULL)) {
         return false;
     }
-    struct _pulse pulse;
-    while (MsgReceivePulse(_chid, &pulse, sizeof(pulse), nullptr) == -1) {
-        if (errno != EINTR) {
-            // stop using this timer, so that a late pulse cannot end a
-            // later sleep early
-            _state = State::FAILED;
-            close();
-            return false;
-        }
+    // only this thread wakes this timer's channel, so the pulse is the
+    // timer's
+    if (_timer.wait() == PulseTimer::Pulse::ERROR) {
+        // stop using this timer, so that a late pulse cannot end a
+        // later sleep early
+        _state = State::FAILED;
+        _timer.close();
+        return false;
     }
     return true;
 }
