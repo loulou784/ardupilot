@@ -22,11 +22,12 @@
     device found and every SPI device in the board's table, with the time
     a transfer takes
   - run periodic callbacks on the bus threads, and measure how regularly
-    they run, with a transfer in each callback
+    they run, with a read in each callback: WHO_AM_I of the SPI devices,
+    checked against the first value read, and a free I2C address
 
-  The scan only reads, as i2cdetect -r does, which is safe for nearly all
-  devices; the ID reads of the devices found write only the register
-  address, as every register read does.
+  Nothing is written to a device: the scan only reads, as i2cdetect -r
+  does, which is safe for nearly all devices, and the register reads
+  send only the register address.
 */
 #include <string.h>
 
@@ -65,14 +66,23 @@ uint32_t percentile(const uint32_t *samples, uint32_t n, float pct)
     return BINS - 1;
 }
 
-// a periodic callback that records its periods and does one transfer
+// a periodic callback that records its periods and does one transfer: a
+// read, which sends at most one byte (a register address), so that the
+// test never writes to a device; the bytes read are compared with the
+// first ones read
 class CallbackTimer {
 public:
     CallbackTimer(const char *name, uint32_t period_us)
         : _name(name), _period_us(period_us) { }
 
-    bool start(AP_HAL::Device *dev, uint8_t send_len, uint8_t recv_len) {
+    bool start(AP_HAL::Device *dev, const uint8_t *send, uint8_t send_len, uint8_t recv_len) {
+        if (send_len > sizeof(_send) || recv_len > sizeof(_first)) {
+            return false;
+        }
         _dev = dev;
+        if (send_len > 0) {
+            memcpy(_send, send, send_len);
+        }
         _send_len = send_len;
         _recv_len = recv_len;
         return dev->register_periodic_callback(
@@ -95,6 +105,10 @@ public:
                             _count ? double(sum) / _count : 0.0, unsigned(min), unsigned(max),
                             _count ? double(_transfer_sum_us) / _count : 0.0,
                             unsigned(_transfer_failures));
+        if (_have_first && _recv_len > 0) {
+            hal.console->printf("%s read 0x%02x first, then other data %u times\n",
+                                _name, unsigned(_first[0]), unsigned(_mismatches));
+        }
         hal.console->printf("%s period percentiles: 0.1%% %u, 1%% %u, 50%% %u, 99%% %u, 99.9%% %u us\n",
                             _name,
                             unsigned(percentile(_period, _count, 0.1f)),
@@ -114,19 +128,29 @@ private:
         if (_count >= CALLBACK_SAMPLES) {
             return;
         }
-        uint8_t send[2] {}, recv[8];
+        uint8_t recv[sizeof(_first)];
         const uint32_t t0 = AP_HAL::micros();
-        if (!_dev->transfer(send, _send_len, recv, _recv_len)) {
-            _transfer_failures++;
-        }
+        const bool ok = _dev->transfer(_send, _send_len, recv, _recv_len);
         _transfer_sum_us += AP_HAL::micros() - t0;
+        if (!ok) {
+            _transfer_failures++;
+        } else if (!_have_first) {
+            memcpy(_first, recv, _recv_len);
+            _have_first = true;
+        } else if (memcmp(_first, recv, _recv_len) != 0) {
+            _mismatches++;
+        }
     }
 
     const char *_name;
     const uint32_t _period_us;
     AP_HAL::Device *_dev;
+    uint8_t _send[1];
     uint8_t _send_len;
     uint8_t _recv_len;
+    uint8_t _first[8];
+    bool _have_first;
+    uint32_t _mismatches;
     uint32_t _last_us;
     uint32_t _period[CALLBACK_SAMPLES];
     volatile uint32_t _count;
@@ -257,8 +281,16 @@ void read_spi()
                             unsigned(values[1]), unsigned(values[2]),
                             double(us) / ARRAY_SIZE(id_regs));
         if (num_timers < ARRAY_SIZE(timers) && timers[num_timers] == nullptr) {
+            // the callback reads WHO_AM_I at the low speed: the InvenSense
+            // MPU chips allow only 1 MHz for registers other than the
+            // sensor data
+            {
+                WITH_SEMAPHORE(dev->get_semaphore());
+                dev->set_speed(AP_HAL::Device::SPEED_LOW);
+            }
+            static const uint8_t who_am_i = 0x75 | 0x80;
             timers[num_timers] = NEW_NOTHROW CallbackTimer("SPI callback", 1000);
-            if (timers[num_timers] && timers[num_timers]->start(dev, 2, 0)) {
+            if (timers[num_timers] && timers[num_timers]->start(dev, &who_am_i, 1, 1)) {
                 num_timers++;
             }
         }
@@ -289,7 +321,7 @@ void start_i2c_callbacks()
         for (const auto &c : callbacks) {
             if (num_timers < ARRAY_SIZE(timers)) {
                 timers[num_timers] = NEW_NOTHROW CallbackTimer(c.name, c.period_us);
-                if (timers[num_timers] && timers[num_timers]->start(dev, 1, 1)) {
+                if (timers[num_timers] && timers[num_timers]->start(dev, nullptr, 0, 1)) {
                     num_timers++;
                 }
             }
