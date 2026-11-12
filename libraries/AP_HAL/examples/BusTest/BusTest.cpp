@@ -158,7 +158,7 @@ private:
     uint32_t _transfer_failures;
 };
 
-CallbackTimer *timers[3];
+CallbackTimer *timers[8];
 uint8_t num_timers;
 
 // register 0, and the WHO_AM_I registers of InvenSense (0x75), ST (0x0f)
