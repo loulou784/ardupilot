@@ -18,13 +18,15 @@
 
   - scan every I2C bus in the bus mask, reading one byte from each
     address, and list the devices that answer, with the time a probe takes
-  - read the first register and the usual WHO_AM_I registers of every SPI
-    device in the board's table, with the time a transfer takes
+  - read the first register and the usual WHO_AM_I registers of every I2C
+    device found and every SPI device in the board's table, with the time
+    a transfer takes
   - run periodic callbacks on the bus threads, and measure how regularly
     they run, with a transfer in each callback
 
   The scan only reads, as i2cdetect -r does, which is safe for nearly all
-  devices.
+  devices; the ID reads of the devices found write only the register
+  address, as every register read does.
 */
 #include <string.h>
 
@@ -135,6 +137,39 @@ private:
 CallbackTimer *timers[3];
 uint8_t num_timers;
 
+// register 0, and the WHO_AM_I registers of InvenSense (0x75), ST (0x0f)
+// and Bosch (0x00) devices
+const uint8_t id_regs[] = { 0x00, 0x0f, 0x75 };
+
+// read the ID registers of a device that answered the scan: each read is
+// a register write then a read, with a repeated start
+void read_i2c_ids(uint8_t bus, uint8_t address)
+{
+    AP_HAL::I2CDevice *dev = hal.i2c_mgr->get_device_ptr(bus, address);
+    if (dev == nullptr) {
+        return;
+    }
+    uint8_t values[ARRAY_SIZE(id_regs)] {};
+    uint8_t failed = 0;
+    uint32_t us = 0;
+    {
+        WITH_SEMAPHORE(dev->get_semaphore());
+        for (uint8_t r = 0; r < ARRAY_SIZE(id_regs); r++) {
+            const uint32_t t0 = AP_HAL::micros();
+            if (!dev->read_registers(id_regs[r], &values[r], 1)) {
+                failed++;
+            }
+            us += AP_HAL::micros() - t0;
+        }
+    }
+    hal.console->printf("  0x%02x: reg 0x00 0x%02x, 0x0f 0x%02x, 0x75 0x%02x; %u of %u reads failed, "
+                        "%.1f us per read\n",
+                        unsigned(address), unsigned(values[0]), unsigned(values[1]),
+                        unsigned(values[2]), unsigned(failed), unsigned(ARRAY_SIZE(id_regs)),
+                        double(us) / ARRAY_SIZE(id_regs));
+    delete dev;
+}
+
 void scan_i2c()
 {
     const uint32_t mask = hal.i2c_mgr->get_bus_mask();
@@ -152,6 +187,7 @@ void scan_i2c()
         hal.console->printf("I2C bus %u:", unsigned(bus));
         uint32_t found = 0, probes = 0;
         uint64_t probe_us = 0;
+        uint8_t addresses[0x78];
         for (uint8_t address = 0x08; address < 0x78; address++) {
             AP_HAL::I2CDevice *dev = hal.i2c_mgr->get_device_ptr(bus, address);
             if (dev == nullptr) {
@@ -168,13 +204,16 @@ void scan_i2c()
             }
             if (ok) {
                 hal.console->printf(" 0x%02x", unsigned(address));
-                found++;
+                addresses[found++] = address;
             }
             delete dev;
         }
         hal.console->printf("%s; %u devices, %.1f us per probe\n",
                             found ? "" : " none", unsigned(found),
                             probes ? double(probe_us) / probes : 0.0);
+        for (uint32_t i = 0; i < found; i++) {
+            read_i2c_ids(bus, addresses[i]);
+        }
     }
 }
 
@@ -195,16 +234,15 @@ void read_spi()
             hal.console->printf("SPI %s: not available\n", name);
             continue;
         }
-        // register 0, and WHO_AM_I of InvenSense (0x75), ST and Bosch
-        // (0x0f, 0x00) devices, with the usual read flag
-        static const uint8_t regs[] = { 0x00, 0x0f, 0x75 };
-        uint8_t values[ARRAY_SIZE(regs)] {};
+        // the ID registers, with the usual read flag
+        const uint8_t *regs = id_regs;
+        uint8_t values[ARRAY_SIZE(id_regs)] {};
         bool ok = true;
         uint32_t us = 0;
         {
             WITH_SEMAPHORE(dev->get_semaphore());
             dev->set_speed(AP_HAL::Device::SPEED_LOW);
-            for (uint8_t r = 0; r < ARRAY_SIZE(regs); r++) {
+            for (uint8_t r = 0; r < ARRAY_SIZE(id_regs); r++) {
                 const uint8_t reg = regs[r] | 0x80;
                 const uint32_t t0 = AP_HAL::micros();
                 ok = dev->transfer(&reg, 1, &values[r], 1) && ok;
@@ -217,7 +255,7 @@ void read_spi()
                             name, unsigned(dev->bus_num()), unsigned(dev->get_bus_address()),
                             ok ? "ok" : "transfer failed", unsigned(values[0]),
                             unsigned(values[1]), unsigned(values[2]),
-                            double(us) / ARRAY_SIZE(regs));
+                            double(us) / ARRAY_SIZE(id_regs));
         if (num_timers < ARRAY_SIZE(timers) && timers[num_timers] == nullptr) {
             timers[num_timers] = NEW_NOTHROW CallbackTimer("SPI callback", 1000);
             if (timers[num_timers] && timers[num_timers]->start(dev, 2, 0)) {
